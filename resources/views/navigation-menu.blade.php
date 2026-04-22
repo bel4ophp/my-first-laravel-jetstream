@@ -122,6 +122,8 @@
                         </x-slot>
                     </x-dropdown>
                 </div>
+
+                <x-dark-mode-toggle />
             </div>
 
             <!-- Hamburger -->
