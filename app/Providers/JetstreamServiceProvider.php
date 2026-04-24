@@ -9,6 +9,8 @@ use App\Actions\Jetstream\DeleteUser;
 use App\Actions\Jetstream\InviteTeamMember;
 use App\Actions\Jetstream\RemoveTeamMember;
 use App\Actions\Jetstream\UpdateTeamName;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Jetstream\Jetstream;
 
@@ -45,17 +47,35 @@ class JetstreamServiceProvider extends ServiceProvider
     {
         Jetstream::defaultApiTokenPermissions(['read']);
 
-        Jetstream::role('admin', 'Administrator', [
-            'create',
-            'read',
-            'update',
-            'delete',
-        ])->description('Administrator users can perform any action.');
+        // Safety Check for Migrations/Docker Setup
+        if (app()->runningInConsole() || !Schema::hasTable('roles')) {
+            // Optional: Define a hardcoded fallback here if you want
+            return;
+        }
 
-        Jetstream::role('editor', 'Editor', [
-            'read',
-            'create',
-            'update',
-        ])->description('Editor users have the ability to read, create, and update.');
+        // Fetch Roles with their Permissions from DB (Cached)
+        // Cache PLAIN ARRAYS to avoid "Incomplete Class" issues
+        $roles = Cache::rememberForever('jetstream_roles_db', function () {
+            return \App\Models\Role::with('permissions')
+                ->get()
+                ->map(function ($role) {
+                    return [
+                        'key'         => $role->key,
+                        'name'        => $role->name,
+                        'permissions' => $role->permissions->pluck('key')->toArray(),
+                    ];
+                })->toArray();
+        });
+
+        // Register each DB role into Jetstream's memory
+        if (is_array($roles)) {
+            foreach ($roles as $role) {
+                Jetstream::role(
+                    $role['key'],
+                    $role['name'],
+                    $role['permissions']
+                )->description("Access managed via database.");
+            }
+        }
     }
 }
