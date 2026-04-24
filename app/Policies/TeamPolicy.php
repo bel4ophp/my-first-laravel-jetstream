@@ -10,12 +10,21 @@ class TeamPolicy
 {
     use HandlesAuthorization;
 
+    public function before(User $user)
+    {
+        if ($user->is_admin) {
+            return true; // admin can do everything, skip other checks
+        }
+
+        return null; // continue to specific policy method
+    }
+
     /**
      * Determine whether the user can view any models.
      */
     public function viewAny(User $user): bool
     {
-        return true;
+        return $user->hasTeamPermission($user->currentTeam, 'view-any');
     }
 
     /**
@@ -23,7 +32,7 @@ class TeamPolicy
      */
     public function view(User $user, Team $team): bool
     {
-        return $user->belongsToTeam($team);
+        return $user->belongsToTeam($team) || $user->hasTeamPermission($user->currentTeam, 'view');
     }
 
     /**
@@ -31,7 +40,7 @@ class TeamPolicy
      */
     public function create(User $user): bool
     {
-        return true;
+        return $user->hasTeamPermission($user->currentTeam, 'create');
     }
 
     /**
@@ -39,7 +48,7 @@ class TeamPolicy
      */
     public function update(User $user, Team $team): bool
     {
-        return $user->ownsTeam($team);
+        return $user->ownsTeam($team) || $user->hasTeamPermission($user->currentTeam, 'update');
     }
 
     /**
@@ -47,7 +56,7 @@ class TeamPolicy
      */
     public function addTeamMember(User $user, Team $team): bool
     {
-        return $user->ownsTeam($team);
+        return $user->ownsTeam($team) || $user->hasTeamPermission($user->currentTeam, 'add-team-member');
     }
 
     /**
@@ -55,7 +64,7 @@ class TeamPolicy
      */
     public function updateTeamMember(User $user, Team $team): bool
     {
-        return $user->ownsTeam($team);
+        return $user->ownsTeam($team) || $user->hasTeamPermission($user->currentTeam, 'update-team-member');
     }
 
     /**
@@ -63,7 +72,7 @@ class TeamPolicy
      */
     public function removeTeamMember(User $user, Team $team): bool
     {
-        return $user->ownsTeam($team);
+        return $user->ownsTeam($team) || $user->hasTeamPermission($user->currentTeam, 'remove-team-member');
     }
 
     /**
@@ -71,6 +80,6 @@ class TeamPolicy
      */
     public function delete(User $user, Team $team): bool
     {
-        return $user->ownsTeam($team);
+        return $user->ownsTeam($team) || $user->hasTeamPermission($user->currentTeam, 'delete');
     }
 }
