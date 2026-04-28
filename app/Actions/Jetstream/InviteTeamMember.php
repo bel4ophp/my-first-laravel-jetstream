@@ -7,7 +7,9 @@ use App\Models\User;
 use Closure;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Laravel\Jetstream\Contracts\InvitesTeamMembers;
@@ -27,14 +29,37 @@ class InviteTeamMember implements InvitesTeamMembers
 
         $this->validate($team, $email, $role);
 
-        InvitingTeamMember::dispatch($team, $email, $role);
+        try {
+            Jetstream::findUserByEmailOrFail($email);
+            
+            InvitingTeamMember::dispatch($team, $email, $role);
+    
+            $invitation = $team->teamInvitations()->create([
+                'email' => $email,
+                'role' => $role,
+            ]);
+    
+            Log::error("User with email {$email} found. Sending invitation.");
 
-        $invitation = $team->teamInvitations()->create([
-            'email' => $email,
-            'role' => $role,
-        ]);
+            Mail::to($email)->send(new TeamInvitation($invitation));
+        } catch (\Throwable $th) {
+            Log::error("User with email {$email} not found. Creating new user and sending password reset link.");
+            $newTeamMember = User::create([
+                'name' => $email,
+                'email' => $email,
+                'password' => bcrypt(str()->random(16)), // random password
+            ]);
 
-        Mail::to($email)->send(new TeamInvitation($invitation));
+            // Assign user to selected team if provided
+            $team->users()->attach($newTeamMember, ['role' => $role]);
+            $newTeamMember->switchTeam($team);
+
+            // Generate password reset token
+            $token = Password::createToken($newTeamMember);
+
+            // Send password reset notification
+            $newTeamMember->sendPasswordResetNotification($token);
+        }
     }
 
     /**

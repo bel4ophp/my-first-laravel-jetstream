@@ -27,6 +27,23 @@ class CreateTeam implements CreatesTeams
 
         AddingTeam::dispatch($user);
 
+        if($user->isTeamManager()) {
+            // Create the team directly
+            $team = Team::create([
+                'user_id' => $user->id, // still mark who created it
+                'name' => $input['name'],
+                'personal_team' => false,
+            ]);
+    
+            // Attach the current user with a custom role instead of 'owner'
+            $team->users()->attach($user, ['role' => $user->isTeamManager() ? 'manager' : 'admin']);
+    
+            // Switch the user into this team
+            $user->switchTeam($team);
+    
+            return $team;
+        }
+
         $user->switchTeam($team = $user->ownedTeams()->create([
             'name' => $input['name'],
             'personal_team' => false,
