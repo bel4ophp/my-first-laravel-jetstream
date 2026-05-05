@@ -136,6 +136,9 @@
                 <x-slot name="content">
                     <div class="space-y-6">
                         @foreach ($team->users->sortBy('name') as $user)
+                            @if ($user->is_admin) 
+                                @continue
+                            @endif
                             <div class="flex items-center justify-between">
                                 <div class="flex items-center">
                                     <img class="size-8 rounded-full object-cover" src="{{ $user->profile_photo_url }}" alt="{{ $user->name }}">
