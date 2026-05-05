@@ -17,6 +17,7 @@ use Laravel\Jetstream\Events\InvitingTeamMember;
 use Laravel\Jetstream\Jetstream;
 use Laravel\Jetstream\Mail\TeamInvitation;
 use Laravel\Jetstream\Rules\Role;
+use App\Rules\TeamManager;
 
 class InviteTeamMember implements InvitesTeamMembers
 {
@@ -86,10 +87,12 @@ class InviteTeamMember implements InvitesTeamMembers
     {
         return array_filter([
             'email' => [
-                'required', 'email',
+                'required', 
+                'email',
                 Rule::unique(Jetstream::teamInvitationModel())->where(function (Builder $query) use ($team) {
                     $query->where('team_id', $team->id);
                 }),
+                new TeamManager,
             ],
             'role' => Jetstream::hasRoles()
                             ? ['required', 'string', new Role]
