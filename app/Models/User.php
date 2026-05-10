@@ -84,4 +84,12 @@ class User extends Authenticatable
 
         return $role && $role->key === 'manager';
     }
+
+    public static function getTeamManager(int $teamId): ?User
+    {
+        return User::whereHas('teams', function ($query) use ($teamId) {
+            $query->where('teams.id', $teamId)
+                ->where('team_user.role', 'manager');
+        })->first();
+    }
 }

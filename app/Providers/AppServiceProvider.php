@@ -2,7 +2,10 @@
 
 namespace App\Providers;
 
+use App\Events\UserClockedInEvent;
+use App\Listeners\UserClockedInListener;
 use App\Models\User;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -28,5 +31,10 @@ class AppServiceProvider extends ServiceProvider
             // Note: return 'null' allows the check to fall through to 
             // regular policies if the user is NOT a global admin.
         });
+
+        // Event::listen(
+        //     UserClockedInEvent::class,
+        //     UserClockedInListener::class,
+        // );
     }
 }

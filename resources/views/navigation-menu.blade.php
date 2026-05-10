@@ -83,6 +83,9 @@
                         </button>
                     @endcanany
                 @endif
+                
+                <!-- Notifications Dropdown -->
+                <livewire:notifications.dropdown />
 
                 <!-- Settings Dropdown -->
                 <div class="ms-3 relative">
@@ -139,7 +142,12 @@
                 <x-dark-mode-toggle />
             </div>
 
-            <!-- Dark Mode Toggle for Mobile -->
+            <!-- Notifications Dropdown for Mobile -->
+            <div class="-me-2 flex items-center sm:hidden">
+                <livewire:notifications.dropdown />
+            </div>
+            
+            <!-- Dark Mode Toggle for Mobile -->            
             <div class="-me-2 flex items-center sm:hidden">
                 <x-dark-mode-toggle />
             </div>
@@ -200,8 +208,7 @@
                 <form method="POST" action="{{ route('logout') }}" x-data>
                     @csrf
 
-                    <x-responsive-nav-link href="{{ route('logout') }}"
-                                   @click.prevent="$root.submit();">
+                    <x-responsive-nav-link href="{{ route('logout') }}" @click.prevent="$root.submit();">
                         {{ __('Log Out') }}
                     </x-responsive-nav-link>
                 </form>
