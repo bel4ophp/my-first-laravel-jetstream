@@ -14,7 +14,7 @@
                 rounded-2xl shadow-xl
                 px-10 py-8
                 flex flex-col items-center gap-8
-                w-full max-w-sm
+                w-full
         ">
 
             {{-- Timer Display --}}

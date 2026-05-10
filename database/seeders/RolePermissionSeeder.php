@@ -44,7 +44,7 @@ class RolePermissionSeeder extends Seeder
         // Manager
         $manager->permissions()->sync([
             $permissionModels['read']->id,
-            $permissionModels['create']->id,
+            // $permissionModels['create']->id,
             $permissionModels['update']->id,
             $permissionModels['add-team-member']->id,
             $permissionModels['update-team-member']->id,

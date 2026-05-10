@@ -32,14 +32,14 @@ class InviteTeamMember implements InvitesTeamMembers
 
         try {
             Jetstream::findUserByEmailOrFail($email);
-            
+
             InvitingTeamMember::dispatch($team, $email, $role);
-    
+
             $invitation = $team->teamInvitations()->create([
                 'email' => $email,
                 'role' => $role,
             ]);
-    
+
             Log::error("User with email {$email} found. Sending invitation.");
 
             Mail::to($email)->send(new TeamInvitation($invitation));
@@ -73,9 +73,10 @@ class InviteTeamMember implements InvitesTeamMembers
             'role' => $role,
         ], $this->rules($team), [
             'email.unique' => __('This user has already been invited to the team.'),
-        ])->after(
-            $this->ensureUserIsNotAlreadyOnTeam($team, $email)
-        )->validateWithBag('addTeamMember');
+        ])
+            ->after($this->ensureUserIsNotAlreadyOnTeam($team, $email))
+            ->after($this->ensureUserIsNotAlreadyOnAnyTeam($email))
+            ->validateWithBag('addTeamMember');
     }
 
     /**
@@ -87,16 +88,14 @@ class InviteTeamMember implements InvitesTeamMembers
     {
         return array_filter([
             'email' => [
-                'required', 
+                'required',
                 'email',
                 Rule::unique(Jetstream::teamInvitationModel())->where(function (Builder $query) use ($team) {
                     $query->where('team_id', $team->id);
                 }),
                 new TeamManager,
             ],
-            'role' => Jetstream::hasRoles()
-                            ? ['required', 'string', new Role]
-                            : null,
+            'role' => Jetstream::hasRoles() ? ['required', 'string', new Role] : null,
         ]);
     }
 
@@ -111,6 +110,25 @@ class InviteTeamMember implements InvitesTeamMembers
                 'email',
                 __('This user already belongs to the team.')
             );
+        };
+    }
+
+    protected function ensureUserIsNotAlreadyOnAnyTeam(string $email): Closure
+    {
+        return function ($validator) use ($email) {
+            $user = User::where('email', $email)->first();
+
+            if (! $user) {
+                return;
+            }
+
+            // Checks if user belongs to any team
+            if ($user->teams()->exists()) {
+                $validator->errors()->add(
+                    'email',
+                    __('This user already belongs to another team.')
+                );
+            }
         };
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Events\UserClockedInEvent;
 use App\Models\TimeEntry;
 use App\Models\User;
 use App\Notifications\TimeTrackerNotification;
@@ -58,7 +59,11 @@ class TimeTracker extends Component
 
         // always reload from DB
         $this->loadEntry();
-        // $this->notifyManager($this->entry, 'clock_in');
+
+        event(new UserClockedInEvent(
+            auth()->user(),
+            $this->entry
+        ));
     }
 
     public function clockOut()
