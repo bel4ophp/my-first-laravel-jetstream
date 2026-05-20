@@ -149,7 +149,8 @@
                                     <!-- Manage Team Member Role -->
                                     @if (Gate::check('updateTeamMember', $team) && Laravel\Jetstream\Jetstream::hasRoles())
                                         <button class="ms-2 text-sm text-gray-400 underline" wire:click="manageRole('{{ $user->id }}')">
-                                            {{ Laravel\Jetstream\Jetstream::findRole($user->membership->role)->name }}
+                                            {{-- {{ Laravel\Jetstream\Jetstream::findRole($user->membership->role)->name }} --}}
+                                            <x-lucide-user-round-pen class="w-5 h-5" />
                                         </button>
                                     @elseif (Laravel\Jetstream\Jetstream::hasRoles())
                                         <div class="ms-2 text-sm text-gray-400">
@@ -166,7 +167,8 @@
                                     <!-- Remove Team Member -->
                                     @elseif (Gate::check('removeTeamMember', $team))
                                         <button class="cursor-pointer ms-6 text-sm text-red-500" wire:click="confirmTeamMemberRemoval('{{ $user->id }}')">
-                                            {{ __('Remove') }}
+                                            {{-- {{ __('Remove') }} --}}
+                                            <x-lucide-user-round-x class="w-5 h-5" />
                                         </button>
                                     @endif
                                 </div>

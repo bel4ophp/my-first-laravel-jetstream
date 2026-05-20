@@ -1,4 +1,4 @@
-<div>
+<div class="flex-1">
     <div x-data="timerComponent()">
         {{-- Clock In: only show when no entry for today --}}
         @if(!($clockInTime && $clockOutTime))

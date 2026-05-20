@@ -27,7 +27,7 @@ class AppServiceProvider extends ServiceProvider
         // Define the Global Admin Gate (God Mode)
         // This runs before all other policy checks.
         Gate::before(function (User $user, string $ability) {
-            return $user->is_admin ? true : null; 
+            return $user->is_admin ? true : null;
             // Note: return 'null' allows the check to fall through to 
             // regular policies if the user is NOT a global admin.
         });

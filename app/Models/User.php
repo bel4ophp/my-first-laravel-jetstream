@@ -4,12 +4,14 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 // use Database\Factories\UserFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Jetstream\HasProfilePhoto;
 use Laravel\Jetstream\HasTeams;
+use Laravel\Jetstream\Jetstream;
 use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
@@ -67,6 +69,28 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
+    }
+
+    protected function initials(): Attribute
+    {
+        return Attribute::make(
+            get: fn () => collect(explode(' ', $this->name))
+                ->map(fn ($segment) => strtoupper(substr($segment, 0, 1)))
+                ->join('')
+        );
+    }
+
+
+    protected function roleName(): Attribute
+    {
+        $firstTeam = $this->teams()->orderBy('created_at', 'asc')->first();
+        $role = $this->teamRole($firstTeam);
+
+        return Attribute::make(
+            get: fn () => $role
+                ? Jetstream::findRole($role->key)->name
+                : 'n/a'
+        );
     }
 
     /**
