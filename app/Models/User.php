@@ -86,6 +86,10 @@ class User extends Authenticatable
         $firstTeam = $this->teams()->orderBy('created_at', 'asc')->first();
         $role = $this->teamRole($firstTeam);
 
+        if($role->key === 'owner') {
+            $role->key = 'admin';
+        }
+
         return Attribute::make(
             get: fn () => $role
                 ? Jetstream::findRole($role->key)->name
