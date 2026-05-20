@@ -28,7 +28,7 @@ class InviteTeamMember implements InvitesTeamMembers
     {
         Gate::forUser($user)->authorize('addTeamMember', $team);
 
-        $this->validate($team, $email, $role);
+        $this->validate($user, $team, $email, $role);
 
         try {
             Jetstream::findUserByEmailOrFail($email);
@@ -66,7 +66,7 @@ class InviteTeamMember implements InvitesTeamMembers
     /**
      * Validate the invite member operation.
      */
-    protected function validate(Team $team, string $email, ?string $role): void
+    protected function validate(User $user, Team $team, string $email, ?string $role): void
     {
         Validator::make([
             'email' => $email,
@@ -76,6 +76,7 @@ class InviteTeamMember implements InvitesTeamMembers
         ])
             ->after($this->ensureUserIsNotAlreadyOnTeam($team, $email))
             ->after($this->ensureUserIsNotAlreadyOnAnyTeam($email))
+            ->after($this->ensureOnlyOneManagerPerTeamUnlessAdmin($team, $role, $user))
             ->validateWithBag('addTeamMember');
     }
 
@@ -128,6 +129,21 @@ class InviteTeamMember implements InvitesTeamMembers
                     'email',
                     __('This user already belongs to another team.')
                 );
+            }
+        };
+    }
+
+    /**
+     * Ensure that only one manager is allowed per team unless the user is the team admin.
+     */
+    protected function ensureOnlyOneManagerPerTeamUnlessAdmin(Team $team, ?string $role, User $user): Closure
+    {
+        return function ($validator) use ($team, $role, $user) {
+            if ($role === 'manager') {
+                $hasManager = $team->users()->wherePivot('role', 'manager')->exists();
+                if ($hasManager) {
+                    $validator->errors()->add('role', __('Only one manager is allowed per team.'));
+                }
             }
         };
     }

@@ -69,9 +69,7 @@
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                         <a href="{{ route('users.edit', $user->id) }}" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300">
-                                            <svg class="inline-block w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 9.75a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
-                                            </svg>
+                                            <x-lucide-pencil class="w-5 h-5" />
                                         </a>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -79,9 +77,7 @@
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">
-                                                <svg class="inline-block w-5 h-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 2.991a48.114 48.114 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0L3.84 2.998a48.11 48.11 0 00-3.478.397m15.693 13.016a48.667 48.667 0 01-3.328 0m-15.386 0a48.667 48.667 0 013.328 0m15.693-13.016a48.11 48.11 0 013.478.397m0 0L21.16 2.991m0 0a48.114 48.114 0 00-3.478-.397m0 0h-3.861m10.233 12.23c.029.236.065.471.1.707m0 0a48.382 48.382 0 01-.1-.707m0 0h3.861" />
-                                                </svg>
+                                                <x-lucide-trash class="w-5 h-5" />
                                             </button>
                                         </form>
                                     </td>
