@@ -21,6 +21,7 @@ class RolePermissionSeeder extends Seeder
             'remove-team-member' => 'Remove Team Member Access',
             'update-team-member' => 'Update Team Member Access',
             'add-team-member' => 'Add Team Member Access',
+            'update-time-entries' => 'Update Time Entries Access',
         ];
 
         $permissionModels = [];
@@ -49,6 +50,7 @@ class RolePermissionSeeder extends Seeder
             $permissionModels['add-team-member']->id,
             $permissionModels['update-team-member']->id,
             $permissionModels['remove-team-member']->id,
+            $permissionModels['update-time-entries']->id,
         ]);
 
         // Employee

@@ -32,4 +32,10 @@ export default defineConfig({
             refresh: true,
         }),
     ],
+    css: {
+        transformer: 'postcss',
+    },
+    build: {
+        cssMinify: 'esbuild',
+    },
 });

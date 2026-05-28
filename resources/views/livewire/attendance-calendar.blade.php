@@ -1,9 +1,9 @@
-<div class="space-y-4">
+<div class="space-y-2 sm:space-y-4 w-full px-2 sm:px-0">
 
-    {{-- ── Month navigation ──────────────────────────────────────────────── --}}
+    {{-- ── Month navigation --}}
     <div class="flex items-center justify-between">
         <button wire:click="prevMonth"
-                class="p-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 transition-colors"
+                class="btn btn-square btn-ghost btn-xs sm:btn-sm text-base-content/60 hover:text-base-content"
                 aria-label="Previous month">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5"/>
@@ -11,18 +11,17 @@
         </button>
 
         <div class="text-center">
-            <h2 class="text-base font-semibold text-gray-900 dark:text-white">
+            <h2 class="text-base sm:text-lg font-semibold text-base-content dark:text-white">
                 {{ $this->calendarLabel }}
             </h2>
-            {{-- Loading indicator --}}
-            <span wire:loading class="text-xs text-gray-400 dark:text-gray-500">Loading…</span>
+            <span wire:loading class="text-xs text-base-content/50 dark:text-gray-400">Loading…</span>
         </div>
 
         <button wire:click="nextMonth"
                 @class([
-                    'p-2 rounded-lg border transition-colors',
-                    'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400' => ! $this->isCurrentMonth,
-                    'border-gray-100 dark:border-gray-800 text-gray-300 dark:text-gray-600 cursor-not-allowed' => $this->isCurrentMonth,
+                    'btn btn-square btn-ghost btn-xs sm:btn-sm transition-colors',
+                    'text-base-content/60 hover:text-base-content' => ! $this->isCurrentMonth,
+                    'btn-disabled text-base-content/30' => $this->isCurrentMonth,
                 ])
                 @disabled($this->isCurrentMonth)
                 aria-label="Next month">
@@ -32,25 +31,24 @@
         </button>
     </div>
 
-    {{-- ── Calendar grid ──────────────────────────────────────────────────── --}}
+    {{-- ── Calendar grid --}}
     <div wire:loading.class="opacity-50 pointer-events-none" wire:loading.class.remove="opacity-100">
 
         {{-- Day-of-week header --}}
-        <div class="grid grid-cols-7 gap-1 mb-1">
+        <div class="grid grid-cols-7 gap-1 sm:gap-2 mb-2">
             @foreach (['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] as $dow)
-                <div class="text-center text-xs font-medium py-1
-                    {{ in_array($dow, ['Sat','Sun']) ? 'text-red-400 dark:text-red-500' : 'text-gray-400 dark:text-gray-500' }}">
+                <div class="text-center text-[8px] sm:text-[10px] font-semibold uppercase text-base-content/50">
                     {{ $dow }}
                 </div>
             @endforeach
         </div>
 
         {{-- Grid cells --}}
-        <div class="grid grid-cols-7 gap-1">
+        <div class="grid grid-cols-7 gap-1 sm:gap-2">
 
             {{-- Empty offset --}}
             @for ($i = 0; $i < $this->firstDayOffset; $i++)
-                <div class="min-h-[5rem] rounded-lg bg-gray-50 dark:bg-gray-800/30 border border-gray-100 dark:border-gray-800"></div>
+                <div class="min-h-[3rem] sm:min-h-[5rem] rounded-box bg-base-200/70 border border-base-200"></div>
             @endfor
 
             {{-- Day cells --}}
@@ -68,43 +66,49 @@
                 <div
                     @if ($clickable) wire:click="selectDay({{ $day }})" @endif
                     @class([
-                        'min-h-[5rem] rounded-lg border p-1.5 text-left transition-all duration-150',
-                        'cursor-pointer'                                                                     => $clickable,
-                        'cursor-default opacity-40'                                                         => ! $clickable,
-                        // Selected
-                        'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-400 dark:border-indigo-500'       => $isSelected,
-                        // Today (not selected)
-                        'bg-white dark:bg-gray-900 border-indigo-300 dark:border-indigo-600 hover:border-indigo-400' => $isToday && ! $isSelected,
-                        // Normal past day
-                        'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 hover:border-gray-400 dark:hover:border-gray-500' => ! $isToday && ! $isSelected && $clickable,
-                        // Weekend / future
-                        'bg-gray-50 dark:bg-gray-800/30 border-gray-100 dark:border-gray-800'               => ! $clickable,
+                        'min-h-[3rem] sm:min-h-[5rem] rounded-box border p-1.5 sm:p-2 text-left transition-all duration-150',
+                        'cursor-pointer hover:border-primary/80 hover:bg-base-100' => $clickable,
+                        'cursor-default opacity-50'                             => ! $clickable,
+                        'bg-primary text-white border-primary'                  => $isSelected,
+                        'bg-base-100 border-primary'                            => $isToday && ! $isSelected,
+                        'bg-base-100 border-base-200'                           => ! $isToday && ! $isSelected && $clickable,
+                        'bg-base-200 border-base-200'                           => ! $clickable,
                     ])>
 
                     {{-- Day number --}}
                     <div @class([
-                        'text-xs font-semibold mb-1',
-                        'text-indigo-600 dark:text-indigo-400' => $isToday,
-                        'text-gray-400 dark:text-gray-500'     => ! $isToday,
+                        'text-[9px] sm:text-[11px] font-semibold mb-0.5 sm:mb-1',
+                        'text-white' => $isSelected,
+                        'text-primary' => $isToday && ! $isSelected,
+                        'text-base-content/50' => ! $isToday && ! $isSelected,
                     ])>{{ $day }}</div>
 
-                    {{-- Name pills — show max 2 --}}
-                    @foreach ($entries->take(2) as $entry)
-                        @php $status = $entry->status(); @endphp
-                        <span @class([
-                            'block text-[10px] font-medium text-gray-600 dark:text-gray-400 ounded px-1 py-0.5 mb-0.5 truncate',
-                            'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300' => $status === 'in',
-                            'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300'         => $status === 'late',
-                            'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'                => $status === 'out',
-                        ])>
-                            {{ explode(' ', $entry->user->name)[0] }}
-                        </span>
-                    @endforeach
+                    {{-- Name pills — show max 2 (hidden on mobile, skeleton instead) --}}
+                    <div class="hidden sm:flex sm:flex-col sm:gap-0.5">
+                        @foreach ($entries->take(2) as $entry)
+                            @php $status = $entry->status(); @endphp
+                            <span @class([
+                                'badge badge-xs truncate text-[7px] sm:text-xs',
+                                'badge-success' => $status === 'in',
+                                'badge-warning' => $status === 'late',
+                                'badge-outline' => $status === 'out',
+                            ])>
+                                {{ explode(' ', $entry->user->name)[0] }}
+                            </span>
+                        @endforeach
+                    </div>
+
+                    {{-- Mobile skeleton loaders --}}
+                    <div class="sm:hidden flex flex-col gap-0.5">
+                        @foreach ($entries->take(2) as $entry)
+                            <div class="skeleton h-4 w-100 rounded"></div>
+                        @endforeach
+                    </div>
 
                     {{-- +N more --}}
                     @if ($entries->count() > 2)
-                        <span class="text-[10px] text-gray-400 dark:text-gray-500 px-0.5">
-                            +{{ $entries->count() - 2 }} more
+                        <span class="text-[8px] sm:text-[10px] text-base-content/50 px-0.5">
+                            +{{ $entries->count() - 2 }}
                         </span>
                     @endif
 
@@ -114,92 +118,83 @@
         </div>
     </div>
 
-    {{-- ── Legend ─────────────────────────────────────────────────────────── --}}
-    <div class="flex items-center gap-4 text-xs text-gray-400 dark:text-gray-500">
-        <span class="flex items-center gap-1.5">
-            <span class="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-100 dark:bg-emerald-900/40 border border-emerald-300 dark:border-emerald-700"></span>
-            Clocked in
-        </span>
-        <span class="flex items-center gap-1.5">
-            <span class="inline-block w-2.5 h-2.5 rounded-sm bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700"></span>
-            Late
-        </span>
-        <span class="flex items-center gap-1.5">
-            <span class="inline-block w-2.5 h-2.5 rounded-sm bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-600"></span>
-            Clocked out
-        </span>
+    {{-- ── Legend --}}
+    <div class="flex flex-wrap items-center gap-1 sm:gap-2 text-[10px] sm:text-xs text-base-content/60">
+        <span class="badge badge-sm badge-success badge-outline">Clocked in</span>
+        <span class="badge badge-sm badge-warning badge-outline">Late</span>
+        <span class="badge badge-sm badge-outline">Clocked out</span>
     </div>
 
-    {{-- ── Day detail panel ───────────────────────────────────────────────── --}}
+    {{-- ── Day detail panel --}}
     @if ($selectedDay)
         <div x-data
              x-init="$el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })"
-             class="border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 overflow-hidden">
+             class="card bg-base-100 shadow-sm overflow-hidden text-sm">
 
             {{-- Panel header --}}
-            <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                <div class="flex items-center justify-between gap-2">
-                    <div>
-                        <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
-                            {{ $this->selectedDateLabel }}
-                        </h3>
-                        <p class="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-                            {{ $this->selectedEntries->count() }} {{ Str::plural('employee', $this->selectedEntries->count()) }} recorded
-                        </p>
-                    </div>
-
-                    {{-- Edit time entry --}}
-                    <div class="text-right flex-shrink-0">
-                        <!-- Manage Time Entry -->
-                        @if ($this->canManageTeamMembers)
-                            <button class="ms-2 text-sm text-gray-400 underline" wire:click="manageTimeEntry({{ $entry->id }})">
-                                <x-lucide-calendar-cog class="w-7 h-7" />
-                            </button>
-                        @elseif (Laravel\Jetstream\Jetstream::hasRoles())
-                            <div class="ms-2 text-sm text-gray-400">
-                                {{-- {{ Laravel\Jetstream\Jetstream::findRole($entry->user->membership->role)->name }} --}}
-                            </div>
-                        @endif
-                    </div>
+            <div class="flex flex-col gap-3 p-3 sm:gap-4 sm:p-4 border-b border-base-200 md:flex-row md:items-center md:justify-between">
+                <div class="space-y-1">
+                    <h3 class="text-sm sm:text-base font-semibold text-base-content dark:text-white">
+                        {{ $this->selectedDateLabel }}
+                    </h3>
+                    <p class="text-xs text-base-content/60">
+                        {{ $this->selectedEntries->count() }} {{ Str::plural('employee', $this->selectedEntries->count()) }} recorded
+                    </p>
                 </div>
-                <div class="flex items-center gap-2">
-                    <a href="{{ route('reports.attendance.export', ['date' => $this->selectedDateIso]) }}"
-                       class="text-xs border border-gray-200 dark:border-gray-700 rounded-lg px-2.5 py-1.5 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                        Export day
-                    </a>
-                    <button wire:click="selectDay({{ $selectedDay }})"
-                            class="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors p-1 rounded"
-                            aria-label="Close panel">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
-                        </svg>
-                    </button>
+
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+                    @if ($this->canUpdateTimeEntries)
+                        <button type="button"
+                                wire:click="toggleEditingEntries"
+                                class="btn btn-sm gap-2 text-xs {{ $this->editingEntries ? 'btn-error' : 'btn-outline' }}">
+                            <x-lucide-edit-2 class="w-4 h-4" />
+                            <span>{{ $this->editingEntries ? __('Stop editing') : __('Manage entries') }}</span>
+                        </button>
+                    @elseif (Laravel\Jetstream\Jetstream::hasRoles())
+                        <div class="text-xs sm:text-sm text-base-content/60">
+                            {{ __('Manage entries below') }}
+                        </div>
+                    @endif
+
+                    <div class="flex items-center gap-2">
+                        <a href="{{ route('reports.attendance.export', ['date' => $this->selectedDateIso]) }}"
+                           class="btn btn-xs btn-outline">
+                            Export
+                        </a>
+                        <button wire:click="selectDay({{ $selectedDay }})"
+                                class="btn btn-square btn-ghost btn-sm"
+                                aria-label="Close panel">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
                 </div>
             </div>
 
             {{-- Summary stats --}}
-            <div class="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-800 border-b border-gray-100 dark:border-gray-800">
+            <div class="stats stats-3 shadow-none bg-base-100 border-b border-base-200">
                 @php
                     $totalCount  = $this->selectedEntries->count();
                     $activeCount = $this->selectedEntries->filter(fn ($e) => in_array($e->status(), ['in','late']))->count();
                     $lateCount   = $this->selectedEntries->filter(fn ($e) => $e->status() === 'late')->count();
                 @endphp
-                <div class="px-4 py-3 text-center">
-                    <div class="text-xs text-gray-400 dark:text-gray-500 mb-0.5">Total</div>
-                    <div class="text-xl font-semibold text-gray-900 dark:text-white">{{ $totalCount }}</div>
+                <div class="stat">
+                    <div class="stat-title">Total</div>
+                    <div class="stat-value">{{ $totalCount }}</div>
                 </div>
-                <div class="px-4 py-3 text-center">
-                    <div class="text-xs text-gray-400 dark:text-gray-500 mb-0.5">Still in</div>
-                    <div class="text-xl font-semibold text-emerald-600 dark:text-emerald-400">{{ $activeCount }}</div>
+                <div class="stat">
+                    <div class="stat-title">Still in</div>
+                    <div class="stat-value text-emerald-600 dark:text-emerald-400">{{ $activeCount }}</div>
                 </div>
-                <div class="px-4 py-3 text-center">
-                    <div class="text-xs text-gray-400 dark:text-gray-500 mb-0.5">Late</div>
-                    <div class="text-xl font-semibold text-amber-600 dark:text-amber-400">{{ $lateCount }}</div>
+                <div class="stat">
+                    <div class="stat-title">Late</div>
+                    <div class="stat-value text-amber-600 dark:text-amber-400">{{ $lateCount }}</div>
                 </div>
             </div>
 
             {{-- Employee list --}}
-            <div class="divide-y divide-gray-50 dark:divide-gray-800 max-h-80 overflow-y-auto">
+            <div class="divide-y divide-base-200 max-h-80 overflow-y-auto">
 
                 @forelse ($this->selectedEntries as $entry)
                     @php
@@ -210,45 +205,70 @@
                             : $entry->clockInFormatted() . ' – now';
                     @endphp
 
-                    <div class="flex items-center gap-3 px-4 py-2.5">
+                    <div class="flex flex-col gap-3 p-3 sm:p-4 sm:flex-row sm:items-center">
 
                         {{-- Avatar --}}
-                        <div class="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/50 text-indigo-700 dark:text-indigo-300 flex items-center justify-center text-xs font-semibold flex-shrink-0 select-none">
-                            {{ $initials }}
+                        <div class="avatar placeholder">
+                            <div class="w-8 sm:w-10 h-8 sm:h-10 rounded-full bg-primary/70 text-primary-content grid place-items-center text-[9px] sm:text-[11px] leading-none font-semibold ring ring-primary/20">
+                                {{ $initials }}
+                            </div>
                         </div>
 
                         {{-- Name + team role --}}
                         <div class="min-w-0 flex-1">
-                            <div class="text-sm font-medium text-gray-900 dark:text-white truncate">
+                            <div class="text-xs sm:text-sm font-medium text-base-content dark:text-white truncate">
                                 {{ $entry->user->name }}
                             </div>
-                            <div class="text-xs text-gray-400 dark:text-gray-500 truncate">
+                            <div class="text-[10px] sm:text-xs text-base-content/60 truncate">
                                 {{ $entry->user->email }}
                             </div>
                         </div>
 
                         {{-- Time range + hours --}}
-                        <div class="text-right flex-shrink-0">
-                            <div class="text-xs font-medium text-gray-700 dark:text-gray-300">
+                        <div class="min-w-0 flex-1 space-y-1 sm:space-y-2">
+                            <div class="text-xs font-medium text-base-content/70 dark:text-base-content/50">
                                 {{ $entry->durationForHumans() ?? '—' }}
                             </div>
-                            <div class="text-xs text-gray-400 dark:text-gray-500">
+                            <div class="text-[10px] sm:text-xs text-base-content/60 dark:text-base-content/50">
                                 {{ $timeRange }}
                             </div>
+
+                            @if ($this->editingEntries)
+                                <div class="grid gap-2 mt-2 sm:mt-3 sm:grid-cols-2">
+                                    <div class="form-control">
+                                        <x-label for="clock_in_{{ $entry->id }}" value="{{ __('Clock in') }}" class="text-[10px] sm:text-xs text-error" />
+                                        <x-input id="clock_in_{{ $entry->id }}" type="time" class="input input-sm input-bordered mt-1" wire:model.defer="entryEdits.{{ $entry->id }}.clock_in" />
+                                        <x-input-error for="entryEdits.{{ $entry->id }}.clock_in" class="mt-2 text-xs" />
+                                    </div>
+                                    <div class="form-control">
+                                        <x-label for="clock_out_{{ $entry->id }}" value="{{ __('Clock out') }}" class="text-[10px] sm:text-xs text-error" />
+                                        <x-input id="clock_out_{{ $entry->id }}" type="time" class="input input-sm input-bordered mt-1" wire:model.defer="entryEdits.{{ $entry->id }}.clock_out" />
+                                        <x-input-error for="entryEdits.{{ $entry->id }}.clock_out" class="mt-2 text-xs" />
+                                    </div>
+                                </div>
+                            @endif
                         </div>
 
                         {{-- Status badge --}}
-                        <span @class([
-                            'text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0',
-                            'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300' => $status === 'in',
-                            'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'         => $status === 'late',
-                            'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'                => $status === 'out',
-                        ])>
-                            {{ match($status) { 'in' => 'Clocked in', 'late' => 'Late', default => 'Clocked out' } }}
-                        </span>
+                        <div class="flex flex-row-reverse sm:flex-col items-end gap-2">
+                            @if ($this->editingEntries)
+                                <button type="button" wire:click="saveEntryEdits({{ $entry->id }})" class="btn btn-square btn-success btn-xs sm:btn-sm">
+                                    <x-lucide-save class="w-4 h-4" />
+                                </button>
+                            @endif
+
+                            <span @class([
+                                'badge badge-xs font-semibold p-2 text-[9px] sm:text-xs',
+                                'badge-success' => $status === 'in',
+                                'badge-warning' => $status === 'late',
+                                'badge-outline' => $status === 'out',
+                            ])>
+                                {{ match($status) { 'in' => 'In', 'late' => 'Late', default => 'Out' } }}
+                            </span>
+                        </div>
                     </div>
                 @empty
-                    <div class="px-4 py-8 text-center text-sm text-gray-400 dark:text-gray-500">
+                    <div class="px-4 py-8 text-center text-sm text-base-content/60">
                         No entries recorded for this day.
                     </div>
                 @endforelse
@@ -256,5 +276,4 @@
             </div>
         </div>
     @endif
-
 </div>
