@@ -1,64 +1,54 @@
-<div class="flex-1">
-    <div x-data="timerComponent()">
-        {{-- Clock In: only show when no entry for today --}}
-        @if(!($clockInTime && $clockOutTime))
-            <template x-if="!running">
-                <button @click="start()" class="inline-flex items-center px-1 pt-1 border-b-2 border-indigo-400 dark:border-indigo-600 text-sm font-medium leading-5 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-indigo-700 transition duration-150 ease-in-out">
-                    Clock In
-                </button>
-            </template>
-        @endif
+<div class="indicator w-full" x-data="timerComponent()">
+    {{-- Clock In: only show when no entry for today --}}
+    @if (!($clockInTime && $clockOutTime))
+        <template x-if="!running">
+            <button class="text-white indicator-item indicator-middle indicator-center btn btn-soft btn-primary w-full h-full backdrop-blur-md bg-opacity-30" @click="start()">Clock In</button>
+        </template>
+    @endif
+    <div class="grid h-full w-full place-items-center">
+        {{-- Timer Display --}}
+        <div class="flex items-end gap-3 tabular-nums">
 
-        <div
-            class="
-                rounded-2xl shadow-xl
-                px-10 py-8
-                flex flex-col items-center gap-8
-                w-full
-        ">
-
-            {{-- Timer Display --}}
-            <div class="flex items-end gap-3 tabular-nums">
-
-                {{-- Hours --}}
-                <div class="flex flex-col items-center">
-                    <span x-text="String(hours).padStart(2, '0')"
-                        class="
-                        text-5xl font-bold tracking-tight
-                        text-gray-800 dark:text-gray-100
-                    "></span>
-                    <span
-                        class="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mt-1">h</span>
-                </div>
-
-                <span class="text-4xl font-light text-gray-300 dark:text-gray-600 mb-5">:</span>
-
-                {{-- Minutes --}}
-                <div class="flex flex-col items-center">
-                    <span x-text="String(minutes).padStart(2, '0')"
-                        class="
-                        text-5xl font-bold tracking-tight
-                        text-gray-800 dark:text-gray-100
-                    "></span>
-                    <span
-                        class="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mt-1">m</span>
-                </div>
-
-                <span class="text-4xl font-light text-gray-300 dark:text-gray-600 mb-5">:</span>
-
-                {{-- Seconds --}}
-                <div class="flex flex-col items-center">
-                    <span x-text="String(seconds).padStart(2, '0')"
-                        class="
-                        text-5xl font-bold tracking-tight
-                        text-red-600 dark:text-red-500
-                    "></span>
-                    <span class="text-xs font-semibold uppercase tracking-widest text-gray-300 dark:text-gray-600 mt-1">s</span>
-                </div>
-
+            {{-- Hours --}}
+            <div class="flex flex-col items-center">
+                <span x-text="String(hours).padStart(2, '0')"
+                    class="
+                text-5xl font-bold tracking-tight
+                text-gray-800 dark:text-gray-100
+            "></span>
+                <span
+                    class="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mt-1">h</span>
             </div>
+
+            <span class="text-4xl font-light text-gray-300 dark:text-gray-600 mb-5">:</span>
+
+            {{-- Minutes --}}
+            <div class="flex flex-col items-center">
+                <span x-text="String(minutes).padStart(2, '0')"
+                    class="
+                text-5xl font-bold tracking-tight
+                text-gray-800 dark:text-gray-100
+            "></span>
+                <span
+                    class="text-xs font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 mt-1">m</span>
+            </div>
+
+            <span class="text-4xl font-light text-gray-300 dark:text-gray-600 mb-5">:</span>
+
+            {{-- Seconds --}}
+            <div class="flex flex-col items-center">
+                <span x-text="String(seconds).padStart(2, '0')"
+                    class="
+                text-5xl font-bold tracking-tight
+                text-red-600 dark:text-red-500
+            "></span>
+                <span
+                    class="text-xs font-semibold uppercase tracking-widest text-gray-300 dark:text-gray-600 mt-1">s</span>
+            </div>
+
         </div>
     </div>
+
 
     @script
         <script>

@@ -145,28 +145,37 @@
                                     <div class="ms-4 dark:text-white">{{ $user->name }}</div>
                                 </div>
 
-                                <div class="flex items-center">
-                                    <!-- Manage Team Member Role -->
-                                    @if (Gate::check('updateTeamMember', $team) && Laravel\Jetstream\Jetstream::hasRoles())
-                                        <button class="ms-2 text-sm text-gray-400 underline" wire:click="manageRole('{{ $user->id }}')">
-                                            {{-- {{ Laravel\Jetstream\Jetstream::findRole($user->membership->role)->name }} --}}
-                                            <x-lucide-user-round-pen class="w-5 h-5" />
-                                        </button>
-                                    @elseif (Laravel\Jetstream\Jetstream::hasRoles())
+                                <div class="flex items-center justify-between">
+                                    @if (Laravel\Jetstream\Jetstream::hasRoles())
                                         <div class="ms-2 text-sm text-gray-400">
                                             {{ Laravel\Jetstream\Jetstream::findRole($user->membership->role)->name }}
                                         </div>
                                     @endif
 
+                                    <!-- Manage Team Member Role -->
+                                    @if (Gate::check('updateTeamMember', $team) && Laravel\Jetstream\Jetstream::hasRoles())
+                                        {{-- {{ Laravel\Jetstream\Jetstream::findRole($user->membership->role)->name }} --}}
+                                        @if (Laravel\Jetstream\Jetstream::findRole($user->membership->role)->name === auth()->user()->roleName)
+                                            <a href="/user/profile" class="ms-6 text-sm text-gray-400 underline">
+                                                <x-lucide-user-round-pen class="w-5 h-5" />
+                                            </a>
+                                        @else
+                                            <button class="ms-6 text-sm text-gray-400 underline" wire:click="manageRole('{{ $user->id }}')">
+                                                <x-lucide-user-round-pen class="w-5 h-5" />
+                                            </button>
+                                        @endif
+                                    @endif
+
                                     <!-- Leave Team -->
                                     @if ($this->user->id === $user->id)
-                                        <button class="cursor-pointer ms-6 text-sm text-red-500" wire:click="$toggle('confirmingLeavingTeam')">
-                                            {{ __('Leave') }}
+                                        <button class="cursor-pointer ms-2 text-sm text-red-500" wire:click="$toggle('confirmingLeavingTeam')">
+                                            {{-- {{ __('Leave') }} --}}
+                                            <x-lucide-unplug class="w-5 h-5" />
                                         </button>
 
                                     <!-- Remove Team Member -->
                                     @elseif (Gate::check('removeTeamMember', $team))
-                                        <button class="cursor-pointer ms-6 text-sm text-red-500" wire:click="confirmTeamMemberRemoval('{{ $user->id }}')">
+                                        <button class="cursor-pointer ms-2 text-sm text-red-500" wire:click="confirmTeamMemberRemoval('{{ $user->id }}')">
                                             {{-- {{ __('Remove') }} --}}
                                             <x-lucide-user-round-x class="w-5 h-5" />
                                         </button>
@@ -181,12 +190,21 @@
     @endif
 
     <!-- Role Management Modal -->
-    <x-dialog-modal wire:model.live="currentlyManagingRole">
+    <x-dialog-modal wire:model.live="currentlyManagingRole" maxWidth="6xl">
         <x-slot name="title">
             {{ __('Manage Role') }}
         </x-slot>
+        
+        <x-slot name="titleCloseModal">
+            <button class="ms-6 text-sm text-gray-400 underline"  wire:click="stopManagingRole" wire:loading.attr="disabled">
+                {{-- {{ __('Cancel') }} --}}
+                <x-lucide-x class="w-5 h-5" />
+            </button>
+        </x-slot>
+
 
         <x-slot name="content">
+            @if(auth()->user()->is_admin)
             <div class="relative z-0 mt-1 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer">
                 @foreach ($this->roles as $index => $role)
                     <button type="button" class="relative px-4 py-3 inline-flex w-full rounded-lg focus:z-10 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 {{ $index > 0 ? 'border-t border-gray-200 dark:border-gray-700 focus:border-none rounded-t-none' : '' }} {{ ! $loop->last ? 'rounded-b-none' : '' }}"
@@ -213,16 +231,29 @@
                     </button>
                 @endforeach
             </div>
+            @endif
+
+            @if ($managingRoleFor)
+                <div class="mt-6 space-y-4">
+                    <div class="text-sm font-semibold text-gray-900 dark:text-white">
+                        {{ __('Attendance for :name', ['name' => $managingRoleFor->name]) }}
+                    </div>
+
+                    <div class="rounded-xl bg-base-300 p-4">
+                        <livewire:attendance-calendar :user-id="$managingRoleFor->id" wire:key="attendance-calendar-for-{{ $managingRoleFor->id }}" />
+                    </div>
+                </div>
+            @endif
         </x-slot>
 
         <x-slot name="footer">
-            <x-secondary-button wire:click="stopManagingRole" wire:loading.attr="disabled">
+            {{-- <x-secondary-button wire:click="stopManagingRole" wire:loading.attr="disabled">
                 {{ __('Cancel') }}
             </x-secondary-button>
 
             <x-button class="ms-3" wire:click="updateRole" wire:loading.attr="disabled">
                 {{ __('Save') }}
-            </x-button>
+            </x-button> --}}
         </x-slot>
     </x-dialog-modal>
 

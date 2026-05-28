@@ -18,8 +18,8 @@
     <!-- Dropdown -->
     <div x-show="open" @click.away="open = false" x-transition
         class="absolute left-[-8rem] sm:right-0 z-50 mt-3 w-80 max-w-sm
-            bg-white dark:bg-gray-800
-            border border-gray-200 dark:border-gray-700 shadow-lg"
+            bg-base-300
+            shadow-md shadow-accent/40"
     >
 
         <!-- Header -->

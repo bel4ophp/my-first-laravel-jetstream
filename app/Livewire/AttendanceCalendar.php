@@ -17,6 +17,15 @@ class AttendanceCalendar extends Component
     public int  $year;
     public int  $month;
     public ?int $selectedDay = null;
+    public ?int $userId = null;
+    public bool $editingEntries = false;
+    public array $entryEdits = [];
+    public ?int $editingTimeEntryId = null;
+    public bool $editingTimeEntry = false;
+    public array $editForm = [
+        'clock_in' => '',
+        'clock_out' => null,
+    ];
 
     public function mount(): void
     {
@@ -49,16 +58,149 @@ class AttendanceCalendar extends Component
 
     public function selectDay(int $day): void
     {
-        $this->selectedDay = $this->selectedDay === $day ? null : $day;
+        if ($this->selectedDay === $day) {
+            $this->selectedDay = null;
+            $this->stopEditingEntries();
+
+            return;
+        }
+
+        $this->selectedDay = $day;
+        $this->stopEditingEntries();
+    }
+
+    public function toggleEditingEntries(): void
+    {
+        $this->editingEntries = ! $this->editingEntries;
+
+        if ($this->editingEntries) {
+            $this->initializeEntryEdits();
+        } else {
+            $this->stopEditingEntries();
+        }
+    }
+
+    public function initializeEntryEdits(): void
+    {
+        $this->entryEdits = $this->selectedEntries->mapWithKeys(function (TimeEntry $entry) {
+            return [$entry->id => [
+                'clock_in' => $entry->clockInFormatted(),
+                'clock_out' => $entry->clockOutFormatted(),
+            ]];
+        })->toArray();
+    }
+
+    public function stopEditingEntries(): void
+    {
+        $this->editingEntries = false;
+        $this->entryEdits = [];
+    }
+
+    public function saveEntryEdits(int $entryId): void
+    {
+        if (! isset($this->entryEdits[$entryId])) {
+            return;
+        }
+
+        $entry = TimeEntry::findOrFail($entryId);
+
+        Gate::authorize('update', $entry);
+
+        $this->validate([
+            "entryEdits.$entryId.clock_in" => ['required', 'date_format:H:i'],
+            "entryEdits.$entryId.clock_out" => ['nullable', 'date_format:H:i'],
+        ]);
+
+        $date = Carbon::parse($entry->work_day)->format('Y-m-d');
+        $clockIn = Carbon::createFromFormat('Y-m-d H:i', "$date {$this->entryEdits[$entryId]['clock_in']}");
+        $clockOut = null;
+
+        if ($this->entryEdits[$entryId]['clock_out']) {
+            $clockOut = Carbon::createFromFormat('Y-m-d H:i', "$date {$this->entryEdits[$entryId]['clock_out']}");
+
+            if ($clockOut->lt($clockIn)) {
+                $this->addError("entryEdits.$entryId.clock_out", 'Clock out must be after clock in.');
+                return;
+            }
+        }
+
+        $entry->clock_in = $clockIn;
+        $entry->clock_out = $clockOut;
+        $entry->worked_minutes = $clockOut ? $clockIn->diffInMinutes($clockOut) : null;
+        $entry->save();
+
+        $this->initializeEntryEdits();
     }
 
     public function manageTimeEntry(int $timeEntryId): void
     {
-        Gate::authorize('updateTimeEntries', TimeEntry::class);
+        $this->startEditingTimeEntry($timeEntryId);
+    }
 
-        // TODO: Open modal or navigate to edit view for the time entry
-        // For now, just dispatch an event or emit to parent component
-        $this->dispatch('edit-time-entry', id: $timeEntryId);
+    public function startEditingTimeEntry(int $timeEntryId): void
+    {
+        $entry = TimeEntry::with('user')->findOrFail($timeEntryId);
+
+        Gate::authorize('update', $entry);
+
+        $this->editingTimeEntryId = $entry->id;
+        $this->editingTimeEntry = true;
+        $this->editForm = [
+            'clock_in' => $entry->clockInFormatted(),
+            'clock_out' => $entry->clockOutFormatted(),
+        ];
+    }
+
+    public function stopEditingTimeEntry(): void
+    {
+        $this->editingTimeEntry = false;
+        $this->editingTimeEntryId = null;
+        $this->editForm = [
+            'clock_in' => '',
+            'clock_out' => null,
+        ];
+    }
+
+    public function saveEditedTimeEntry(): void
+    {
+        $entry = TimeEntry::findOrFail($this->editingTimeEntryId);
+
+        Gate::authorize('update', $entry);
+
+        $this->validate([
+            'editForm.clock_in' => ['required', 'date_format:H:i'],
+            'editForm.clock_out' => ['nullable', 'date_format:H:i'],
+        ]);
+
+        $date = Carbon::parse($entry->work_day)->format('Y-m-d');
+        $clockIn = Carbon::createFromFormat('Y-m-d H:i', "$date {$this->editForm['clock_in']}");
+        $clockOut = null;
+
+        if ($this->editForm['clock_out']) {
+            $clockOut = Carbon::createFromFormat('Y-m-d H:i', "$date {$this->editForm['clock_out']}");
+
+            if ($clockOut->lt($clockIn)) {
+                $this->addError('editForm.clock_out', 'Clock out must be after clock in.');
+                return;
+            }
+        }
+
+        $entry->clock_in = $clockIn;
+        $entry->clock_out = $clockOut;
+        $entry->worked_minutes = $clockOut ? $clockIn->diffInMinutes($clockOut) : null;
+        $entry->save();
+
+        $this->stopEditingTimeEntry();
+    }
+
+    #[Computed]
+    public function editEntry(): ?TimeEntry
+    {
+        if (! $this->editingTimeEntryId) {
+            return null;
+        }
+
+        return TimeEntry::with('user')->find($this->editingTimeEntryId);
     }
 
     // ── Data ──────────────────────────────────────────────────────────────────
@@ -69,12 +211,21 @@ class AttendanceCalendar extends Component
     #[Computed]
     public function allowedUserIds(): Collection
     {
+        /** @var \App\Models\User|null $user */
         $user = Auth::user();
+
+        if (! $user) {
+            return collect();
+        }
+
+        if ($this->userId) {
+            return User::whereKey($this->userId)->pluck('id');
+        }
 
         // Admins see everyone
         if ($user->hasTeamRole($user->currentTeam, 'admin') || $user->ownsTeam($user->currentTeam)) {
             // Return all user IDs that belong to ANY team
-            return \App\Models\User::pluck('id');
+            return User::pluck('id');
         }
 
         // Managers see only members of their current team
