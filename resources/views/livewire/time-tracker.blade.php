@@ -1,8 +1,8 @@
-<div class="indicator w-full" x-data="timerComponent()">
+<div class="relative w-full" x-data="timerComponent()">
     {{-- Clock In: only show when no entry for today --}}
     @if (!($clockInTime && $clockOutTime))
         <template x-if="!running">
-            <button class="text-white indicator-item indicator-middle indicator-center btn btn-soft btn-primary w-full h-full backdrop-blur-md bg-opacity-30" @click="start()">Clock In</button>
+            <button class="h-full absolute inset-0 z-10 text-white btn btn-soft btn-primary backdrop-blur-md bg-opacity-30" @click="start()">Clock In</button>
         </template>
     @endif
     <div class="grid h-full w-full place-items-center">

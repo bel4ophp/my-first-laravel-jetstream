@@ -4,40 +4,60 @@ namespace App\Livewire;
 
 use App\Models\TimeEntry;
 use App\Models\User;
+use App\Services\AttendanceCalendarService;
+use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
-use Laravel\Jetstream\Jetstream;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 class AttendanceCalendar extends Component
 {
-    public int  $year;
-    public int  $month;
+    protected AttendanceCalendarService $calendarService;
+
+    public function boot(AttendanceCalendarService $calendarService): void
+    {
+        $this->calendarService = $calendarService;
+    }
+
+    #[Url]
+    public int $year = 0;
+
+    #[Url]
+    public int $month = 0;
+
     public ?int $selectedDay = null;
-    public ?int $userId = null;
-    public bool $editingEntries = false;
-    public array $entryEdits = [];
-    public ?int $editingTimeEntryId = null;
-    public bool $editingTimeEntry = false;
-    public array $editForm = [
-        'clock_in' => '',
+    public ?int $userId      = null;
+
+    // ── Bulk inline editing state ─────────────────────────────────────────────
+    public bool  $editingEntries = false;
+    public array $entryEdits     = [];
+
+    // ── Create new entry state ────────────────────────────────────────────────
+    public bool  $creatingEntry = false;
+    public array $createForm    = [
+        'user_id'   => null,
+        'clock_in'  => '',
         'clock_out' => null,
     ];
 
     public function mount(): void
     {
-        $this->year  = now()->year;
-        $this->month = now()->month;
+        Gate::authorize('viewAny', TimeEntry::class);
+
+        $this->year  = $this->year  ?: now()->year;
+        $this->month = $this->month ?: now()->month;
     }
 
     // ── Navigation ────────────────────────────────────────────────────────────
 
     public function prevMonth(): void
     {
-        $date = Carbon::create($this->year, $this->month, 1)->subMonth();
+        $date = $this->monthStart()->subMonth();
         $this->year  = $date->year;
         $this->month = $date->month;
         $this->selectedDay = null;
@@ -50,7 +70,7 @@ class AttendanceCalendar extends Component
             return;
         }
 
-        $date = Carbon::create($this->year, $this->month, 1)->addMonth();
+        $date = $this->monthStart()->addMonth();
         $this->year  = $date->year;
         $this->month = $date->month;
         $this->selectedDay = null;
@@ -61,19 +81,24 @@ class AttendanceCalendar extends Component
         if ($this->selectedDay === $day) {
             $this->selectedDay = null;
             $this->stopEditingEntries();
+            $this->cancelCreatingEntry();
 
             return;
         }
 
         $this->selectedDay = $day;
         $this->stopEditingEntries();
+        $this->cancelCreatingEntry();
     }
+
+    // ── Bulk inline editing ───────────────────────────────────────────────────
 
     public function toggleEditingEntries(): void
     {
         $this->editingEntries = ! $this->editingEntries;
 
         if ($this->editingEntries) {
+            $this->cancelCreatingEntry();
             $this->initializeEntryEdits();
         } else {
             $this->stopEditingEntries();
@@ -84,7 +109,7 @@ class AttendanceCalendar extends Component
     {
         $this->entryEdits = $this->selectedEntries->mapWithKeys(function (TimeEntry $entry) {
             return [$entry->id => [
-                'clock_in' => $entry->clockInFormatted(),
+                'clock_in'  => $entry->clockInFormatted(),
                 'clock_out' => $entry->clockOutFormatted(),
             ]];
         })->toArray();
@@ -93,7 +118,14 @@ class AttendanceCalendar extends Component
     public function stopEditingEntries(): void
     {
         $this->editingEntries = false;
-        $this->entryEdits = [];
+        $this->entryEdits     = [];
+    }
+
+    public function deleteEntry(int $entryId): void
+    {
+        $entry = TimeEntry::findOrFail($entryId);
+        Gate::authorize('delete', $entry);
+        $entry->delete();
     }
 
     public function saveEntryEdits(int $entryId): void
@@ -103,104 +135,76 @@ class AttendanceCalendar extends Component
         }
 
         $entry = TimeEntry::findOrFail($entryId);
-
         Gate::authorize('update', $entry);
 
         $this->validate([
-            "entryEdits.$entryId.clock_in" => ['required', 'date_format:H:i'],
+            "entryEdits.$entryId.clock_in"  => ['required', 'date_format:H:i'],
             "entryEdits.$entryId.clock_out" => ['nullable', 'date_format:H:i'],
         ]);
 
-        $date = Carbon::parse($entry->work_day)->format('Y-m-d');
-        $clockIn = Carbon::createFromFormat('Y-m-d H:i', "$date {$this->entryEdits[$entryId]['clock_in']}");
-        $clockOut = null;
-
-        if ($this->entryEdits[$entryId]['clock_out']) {
-            $clockOut = Carbon::createFromFormat('Y-m-d H:i', "$date {$this->entryEdits[$entryId]['clock_out']}");
-
-            if ($clockOut->lt($clockIn)) {
-                $this->addError("entryEdits.$entryId.clock_out", 'Clock out must be after clock in.');
-                return;
-            }
+        try {
+            $this->calendarService->updateTimeEntry(
+                $entry,
+                $this->entryEdits[$entryId]['clock_in'],
+                $this->entryEdits[$entryId]['clock_out'],
+            );
+        } catch (\InvalidArgumentException) {
+            $this->addError("entryEdits.$entryId.clock_out", 'Clock out must be after clock in.');
+            return;
         }
-
-        $entry->clock_in = $clockIn;
-        $entry->clock_out = $clockOut;
-        $entry->worked_minutes = $clockOut ? $clockIn->diffInMinutes($clockOut) : null;
-        $entry->save();
 
         $this->initializeEntryEdits();
     }
 
-    public function manageTimeEntry(int $timeEntryId): void
+    // ── Create new entry ──────────────────────────────────────────────────────
+
+    public function startCreatingEntry(): void
     {
-        $this->startEditingTimeEntry($timeEntryId);
-    }
+        $this->stopEditingEntries();
 
-    public function startEditingTimeEntry(int $timeEntryId): void
-    {
-        $entry = TimeEntry::with('user')->findOrFail($timeEntryId);
-
-        Gate::authorize('update', $entry);
-
-        $this->editingTimeEntryId = $entry->id;
-        $this->editingTimeEntry = true;
-        $this->editForm = [
-            'clock_in' => $entry->clockInFormatted(),
-            'clock_out' => $entry->clockOutFormatted(),
-        ];
-    }
-
-    public function stopEditingTimeEntry(): void
-    {
-        $this->editingTimeEntry = false;
-        $this->editingTimeEntryId = null;
-        $this->editForm = [
-            'clock_in' => '',
+        $this->creatingEntry = true;
+        $this->createForm    = [
+            'user_id'   => null,
+            'clock_in'  => '',
             'clock_out' => null,
         ];
     }
 
-    public function saveEditedTimeEntry(): void
+    public function cancelCreatingEntry(): void
     {
-        $entry = TimeEntry::findOrFail($this->editingTimeEntryId);
-
-        Gate::authorize('update', $entry);
-
-        $this->validate([
-            'editForm.clock_in' => ['required', 'date_format:H:i'],
-            'editForm.clock_out' => ['nullable', 'date_format:H:i'],
-        ]);
-
-        $date = Carbon::parse($entry->work_day)->format('Y-m-d');
-        $clockIn = Carbon::createFromFormat('Y-m-d H:i', "$date {$this->editForm['clock_in']}");
-        $clockOut = null;
-
-        if ($this->editForm['clock_out']) {
-            $clockOut = Carbon::createFromFormat('Y-m-d H:i', "$date {$this->editForm['clock_out']}");
-
-            if ($clockOut->lt($clockIn)) {
-                $this->addError('editForm.clock_out', 'Clock out must be after clock in.');
-                return;
-            }
-        }
-
-        $entry->clock_in = $clockIn;
-        $entry->clock_out = $clockOut;
-        $entry->worked_minutes = $clockOut ? $clockIn->diffInMinutes($clockOut) : null;
-        $entry->save();
-
-        $this->stopEditingTimeEntry();
+        $this->creatingEntry = false;
+        $this->createForm    = [
+            'user_id'   => null,
+            'clock_in'  => '',
+            'clock_out' => null,
+        ];
     }
 
-    #[Computed]
-    public function editEntry(): ?TimeEntry
+    public function saveNewEntry(): void
     {
-        if (! $this->editingTimeEntryId) {
-            return null;
+        Gate::authorize('create', TimeEntry::class);
+
+        $this->validate([
+            'createForm.user_id'   => ['required', 'integer', Rule::in($this->selectableUsers->pluck('id'))],
+            'createForm.clock_in'  => ['required', 'date_format:H:i'],
+            'createForm.clock_out' => ['nullable', 'date_format:H:i'],
+        ]);
+
+        $workDay = Carbon::create($this->year, $this->month, $this->selectedDay)->format('Y-m-d');
+
+        try {
+            $this->calendarService->createTimeEntry(
+                (int) $this->createForm['user_id'],
+                $workDay,
+                $this->createForm['clock_in'],
+                $this->createForm['clock_out'],
+            );
+        } catch (\InvalidArgumentException) {
+            $this->addError('createForm.clock_out', 'Clock out must be after clock in.');
+            return;
         }
 
-        return TimeEntry::with('user')->find($this->editingTimeEntryId);
+        $this->cancelCreatingEntry();
     }
 
     // ── Data ──────────────────────────────────────────────────────────────────
@@ -211,25 +215,28 @@ class AttendanceCalendar extends Component
     #[Computed]
     public function allowedUserIds(): Collection
     {
-        /** @var \App\Models\User|null $user */
-        $user = Auth::user();
+        $user = $this->currentUser();
 
         if (! $user) {
             return collect();
         }
 
-        if ($this->userId) {
-            return User::whereKey($this->userId)->pluck('id');
+        return $this->calendarService->scopedUserIds($user, $this->userId);
+    }
+
+    /**
+     * Users available for the new-entry employee selector.
+     */
+    #[Computed]
+    public function selectableUsers(): Collection
+    {
+        $user = $this->currentUser();
+
+        if (! $user) {
+            return collect();
         }
 
-        // Admins see everyone
-        if ($user->hasTeamRole($user->currentTeam, 'admin') || $user->ownsTeam($user->currentTeam)) {
-            // Return all user IDs that belong to ANY team
-            return User::pluck('id');
-        }
-
-        // Managers see only members of their current team
-        return $user->currentTeam->allUsers()->pluck('id');
+        return $this->calendarService->selectableUsers($user);
     }
 
     /**
@@ -264,21 +271,32 @@ class AttendanceCalendar extends Component
     #[Computed]
     public function canManageTeamMembers(): bool
     {
-        $user = Auth::user();
+        $user = $this->currentUser();
 
-        if (! $user || ! $user->currentTeam) {
-            return false;
-        }
-
-        return Gate::check('updateTeamMember', $user->currentTeam)
-            && Jetstream::hasRoles();
+        return $user !== null
+            && $user->currentTeam !== null
+            && Gate::check('updateTeamMember', $user->currentTeam);
     }
 
     #[Computed]
     public function canUpdateTimeEntries(): bool
     {
-        return Gate::check('updateTimeEntries', TimeEntry::class)
-            && Jetstream::hasRoles();
+        return $this->currentUser() !== null
+            && Gate::check('update', new TimeEntry());
+    }
+
+    #[Computed]
+    public function canCreateTimeEntries(): bool
+    {
+        return $this->currentUser() !== null
+            && Gate::check('create', TimeEntry::class);
+    }
+
+    #[Computed]
+    public function canDeleteTimeEntries(): bool
+    {
+        return $this->currentUser() !== null
+            && Gate::check('delete', new TimeEntry());
     }
 
     // ── View helpers ──────────────────────────────────────────────────────────
@@ -286,14 +304,13 @@ class AttendanceCalendar extends Component
     #[Computed]
     public function calendarLabel(): string
     {
-        return Carbon::create($this->year, $this->month, 1)
-            ->translatedFormat('F Y');
+        return $this->monthStart()->translatedFormat('F Y');
     }
 
     #[Computed]
     public function daysInMonth(): int
     {
-        return Carbon::create($this->year, $this->month, 1)->daysInMonth;
+        return $this->monthStart()->daysInMonth;
     }
 
     /**
@@ -302,14 +319,16 @@ class AttendanceCalendar extends Component
     #[Computed]
     public function firstDayOffset(): int
     {
-        $dow = Carbon::create($this->year, $this->month, 1)->dayOfWeek; // 0 = Sunday
+        $dow = $this->monthStart()->dayOfWeek; // 0 = Sunday
         return $dow === 0 ? 6 : $dow - 1;
     }
 
     #[Computed]
     public function selectedDateLabel(): string
     {
-        if (! $this->selectedDay) return '';
+        if (! $this->selectedDay) {
+            return '';
+        }
 
         return Carbon::create($this->year, $this->month, $this->selectedDay)
             ->translatedFormat('l, j F Y');
@@ -318,7 +337,9 @@ class AttendanceCalendar extends Component
     #[Computed]
     public function selectedDateIso(): string
     {
-        if (! $this->selectedDay) return '';
+        if (! $this->selectedDay) {
+            return '';
+        }
 
         return Carbon::create($this->year, $this->month, $this->selectedDay)
             ->format('Y-m-d');
@@ -332,8 +353,22 @@ class AttendanceCalendar extends Component
 
     // ── Rendering ─────────────────────────────────────────────────────────────
 
-    public function render()
+    public function render(): View
     {
         return view('livewire.attendance-calendar');
+    }
+
+    // ── Private ───────────────────────────────────────────────────────────────
+
+    private function monthStart(): Carbon
+    {
+        return Carbon::create($this->year, $this->month, 1);
+    }
+
+    private function currentUser(): ?User
+    {
+        $user = Auth::user();
+
+        return $user instanceof User ? $user : null;
     }
 }
