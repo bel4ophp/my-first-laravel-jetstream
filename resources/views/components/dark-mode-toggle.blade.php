@@ -1,10 +1,14 @@
 <button
     x-data="{ dark: localStorage.theme === 'dark' || (!localStorage.theme && window.matchMedia('(prefers-color-scheme: dark)').matches) }"
-    x-init="$watch('dark', val => {
-        localStorage.theme = val ? 'dark' : 'light';
-        document.documentElement.classList.toggle('dark', val);
-        document.documentElement.setAttribute('data-theme', val ? 'sunset' : 'nord');
-    })"
+    x-init="
+        document.documentElement.classList.toggle('dark', dark);
+        document.documentElement.setAttribute('data-theme', dark ? 'sunset' : 'nord');
+        $watch('dark', val => {
+            localStorage.theme = val ? 'dark' : 'light';
+            document.documentElement.classList.toggle('dark', val);
+            document.documentElement.setAttribute('data-theme', val ? 'sunset' : 'nord');
+        });
+    "
     @click="dark = !dark"
     class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"
 >

@@ -13,14 +13,17 @@ class RolePermissionSeeder extends Seeder
         // Define the Permissions
         $permissions = [
             // JETSTREAM INTERNAL (Required for the UI to work)
-            'create' => 'Create Access',
-            'read'   => 'Read Access',
-            'update' => 'Update Access',
-            'delete' => 'Delete Access',
-            'view-any' => 'View Any Access',
-            'remove-team-member' => 'Remove Team Member Access',
-            'update-team-member' => 'Update Team Member Access',
-            'add-team-member' => 'Add Team Member Access',
+            'create'              => 'Create Access',
+            'read'                => 'Read Access',
+            'update'              => 'Update Access',
+            'delete'              => 'Delete Access',
+            'view-any'            => 'View Any Access',
+            'remove-team-member'  => 'Remove Team Member Access',
+            'update-team-member'  => 'Update Team Member Access',
+            'add-team-member'     => 'Add Team Member Access',
+            // Attendance
+            'view-attendance'     => 'View Attendance Access',
+            'create-time-entries' => 'Create Time Entries Access',
             'update-time-entries' => 'Update Time Entries Access',
         ];
 
@@ -45,17 +48,18 @@ class RolePermissionSeeder extends Seeder
         // Manager
         $manager->permissions()->sync([
             $permissionModels['read']->id,
-            // $permissionModels['create']->id,
             $permissionModels['update']->id,
             $permissionModels['add-team-member']->id,
             $permissionModels['update-team-member']->id,
             $permissionModels['remove-team-member']->id,
+            $permissionModels['view-attendance']->id,
+            $permissionModels['create-time-entries']->id,
             $permissionModels['update-time-entries']->id,
         ]);
 
-        // Employee
-        // $employee->permissions()->sync([
-        //     $permissionModels['read']->id,
-        // ]);
+        // Employee: read-only, own data visible via policy ownership check
+        $employee->permissions()->sync([
+            $permissionModels['read']->id,
+        ]);
     }
 }

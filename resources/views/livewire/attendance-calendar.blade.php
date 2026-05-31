@@ -143,6 +143,15 @@
                 </div>
 
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+                    @if ($this->canCreateTimeEntries)
+                        <button type="button"
+                                wire:click="{{ $creatingEntry ? 'cancelCreatingEntry' : 'startCreatingEntry' }}"
+                                class="btn btn-sm gap-2 text-xs {{ $creatingEntry ? 'btn-error' : 'btn-outline' }}">
+                            <x-lucide-plus class="w-4 h-4" />
+                            <span>{{ $creatingEntry ? __('Cancel') : __('Add entry') }}</span>
+                        </button>
+                    @endif
+
                     @if ($this->canUpdateTimeEntries)
                         <button type="button"
                                 wire:click="toggleEditingEntries"
@@ -195,6 +204,53 @@
 
             {{-- Employee list --}}
             <div class="divide-y divide-base-200 max-h-80 overflow-y-auto">
+
+                {{-- New entry form --}}
+                @if ($creatingEntry)
+                    <div class="flex flex-col gap-3 p-3 sm:p-4 bg-base-200/40">
+                        <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+
+                            {{-- Employee select --}}
+                            <div class="form-control flex-1">
+                                <x-label value="{{ __('Employee') }}" class="text-[10px] sm:text-xs mb-1" />
+                                <select wire:model.defer="createForm.user_id"
+                                        class="select select-sm select-bordered w-full">
+                                    <option value="">{{ __('Select employee…') }}</option>
+                                    @foreach ($this->selectableUsers as $selectableUser)
+                                        <option value="{{ $selectableUser->id }}">{{ $selectableUser->name }}</option>
+                                    @endforeach
+                                </select>
+                                <x-input-error for="createForm.user_id" class="mt-1 text-xs" />
+                            </div>
+
+                            {{-- Clock in --}}
+                            <div class="form-control">
+                                <x-label value="{{ __('Clock in') }}" class="text-[10px] sm:text-xs mb-1" />
+                                <x-input type="time"
+                                         class="input input-sm input-bordered"
+                                         wire:model.defer="createForm.clock_in" />
+                                <x-input-error for="createForm.clock_in" class="mt-1 text-xs" />
+                            </div>
+
+                            {{-- Clock out --}}
+                            <div class="form-control">
+                                <x-label value="{{ __('Clock out') }}" class="text-[10px] sm:text-xs mb-1" />
+                                <x-input type="time"
+                                         class="input input-sm input-bordered"
+                                         wire:model.defer="createForm.clock_out" />
+                                <x-input-error for="createForm.clock_out" class="mt-1 text-xs" />
+                            </div>
+
+                            {{-- Save --}}
+                            <button type="button"
+                                    wire:click="saveNewEntry"
+                                    class="btn btn-sm btn-success gap-2 self-end">
+                                <x-lucide-save class="w-4 h-4" />
+                                {{ __('Save') }}
+                            </button>
+                        </div>
+                    </div>
+                @endif
 
                 @forelse ($this->selectedEntries as $entry)
                     @php
@@ -249,11 +305,22 @@
                             @endif
                         </div>
 
-                        {{-- Status badge --}}
+                        {{-- Status badge + actions --}}
                         <div class="flex flex-row-reverse sm:flex-col items-end gap-2">
                             @if ($this->editingEntries)
-                                <button type="button" wire:click="saveEntryEdits({{ $entry->id }})" class="btn btn-square btn-success btn-xs sm:btn-sm">
+                                <button type="button"
+                                        wire:click="saveEntryEdits({{ $entry->id }})"
+                                        class="btn btn-square btn-success btn-xs sm:btn-sm">
                                     <x-lucide-save class="w-4 h-4" />
+                                </button>
+                            @endif
+
+                            @if ($this->canDeleteTimeEntries)
+                                <button type="button"
+                                        wire:click="deleteEntry({{ $entry->id }})"
+                                        wire:confirm="Delete this time entry? This cannot be undone."
+                                        class="btn btn-square btn-error btn-xs sm:btn-sm btn-outline">
+                                    <x-lucide-trash-2 class="w-4 h-4" />
                                 </button>
                             @endif
 
