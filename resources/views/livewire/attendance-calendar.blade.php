@@ -1,6 +1,6 @@
 <div class="space-y-2 sm:space-y-4 w-full px-2 sm:px-0">
 
-    {{-- ── Month navigation --}}
+    {{-- ── Month navigation + export trigger --}}
     <div class="flex items-center justify-between">
         <button wire:click="prevMonth"
                 class="btn btn-square btn-ghost btn-xs sm:btn-sm text-base-content/60 hover:text-base-content"
@@ -118,14 +118,151 @@
         </div>
     </div>
 
-    {{-- ── Legend --}}
-    <div class="flex flex-wrap items-center gap-1 sm:gap-2 text-[10px] sm:text-xs text-base-content/60">
-        <span class="badge badge-sm badge-success badge-outline">Clocked in</span>
-        <span class="badge badge-sm badge-warning badge-outline">Late</span>
-        <span class="badge badge-sm badge-outline">Clocked out</span>
+    {{-- ── Legend + export trigger --}}
+    <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-1 sm:gap-2 text-[10px] sm:text-xs text-base-content/60">
+            <span class="badge badge-sm badge-success badge-outline">Clocked in</span>
+            <span class="badge badge-sm badge-warning badge-outline">Late</span>
+            <span class="badge badge-sm badge-outline">Clocked out</span>
+        </div>
+
+        @if ($this->canExportAttendance)
+            <button type="button"
+                    onclick="document.getElementById('attendance-export-modal').showModal()"
+                    class="btn btn-xs btn-outline gap-1.5">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+                </svg>
+                Export time entries
+            </button>
+        @endif
     </div>
 
     {{-- ── Day detail panel --}}
+    {{-- ── Export modal (admin + manager only) --}}
+    @if ($this->canExportAttendance)
+        <dialog id="attendance-export-modal" class="modal">
+            <div class="modal-box w-full max-w-md"
+                 x-data="{
+                     type: 'monthly',
+                     date: '{{ now()->format('Y-m-d') }}',
+                     weekDate: '{{ now()->startOfWeek(\Carbon\Carbon::MONDAY)->format('Y-m-d') }}',
+                     year: {{ now()->year }},
+                     month: {{ now()->month }},
+                     startDate: '{{ now()->startOfMonth()->format('Y-m-d') }}',
+                     endDate: '{{ now()->format('Y-m-d') }}'
+                 }">
+
+                <form method="dialog">
+                    <button class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2" aria-label="Close">✕</button>
+                </form>
+
+                <h3 class="font-semibold text-base mb-4">Export Attendance</h3>
+
+                <form method="GET" action="{{ route('reports.attendance.export') }}" class="space-y-4">
+
+                    {{-- Period type --}}
+                    <div role="tablist" class="tabs tabs-boxed">
+                        @foreach ([
+                            'daily'   => 'Daily',
+                            'weekly'  => 'Weekly',
+                            'monthly' => 'Monthly',
+                            'yearly'  => 'Yearly',
+                            'custom'  => 'Custom',
+                        ] as $value => $label)
+                            <button type="button"
+                                    role="tab"
+                                    class="tab text-xs"
+                                    :class="{ 'tab-active': type === '{{ $value }}' }"
+                                    @click="type = '{{ $value }}'">
+                                {{ $label }}
+                            </button>
+                        @endforeach
+                    </div>
+                    <input type="hidden" name="type" :value="type" />
+
+                    {{-- Daily --}}
+                    <template x-if="type === 'daily'">
+                        <div class="form-control">
+                            <label class="label pb-1"><span class="label-text text-xs">Date</span></label>
+                            <input type="date" name="date" x-model="date"
+                                   class="input input-sm input-bordered w-full" />
+                        </div>
+                    </template>
+
+                    {{-- Weekly --}}
+                    <template x-if="type === 'weekly'">
+                        <div class="form-control">
+                            <label class="label pb-1"><span class="label-text text-xs">Any date within the week</span></label>
+                            <input type="date" name="week_date" x-model="weekDate"
+                                   class="input input-sm input-bordered w-full" />
+                        </div>
+                    </template>
+
+                    {{-- Monthly --}}
+                    <template x-if="type === 'monthly'">
+                        <div class="flex gap-2">
+                            <div class="form-control flex-1">
+                                <label class="label pb-1"><span class="label-text text-xs">Year</span></label>
+                                <select name="year" x-model.number="year" class="select select-sm text-sm select-bordered w-full">
+                                    @foreach (range(now()->year, 2020) as $y)
+                                        <option value="{{ $y }}">{{ $y }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            <div class="form-control flex-1">
+                                <label class="label pb-1"><span class="label-text text-xs">Month</span></label>
+                                <select name="month" x-model.number="month" class="select select-sm text-sm select-bordered w-full">
+                                    @foreach (range(1, 12) as $m)
+                                        <option value="{{ $m }}">{{ \Carbon\Carbon::create(null, $m)->format('F') }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
+                    </template>
+
+                    {{-- Yearly --}}
+                    <template x-if="type === 'yearly'">
+                        <div class="form-control">
+                            <label class="label pb-1"><span class="label-text text-xs">Year</span></label>
+                            <select name="year" x-model.number="year" class="select select-sm text-sm select-bordered w-full">
+                                @foreach (range(now()->year, 2020) as $y)
+                                    <option value="{{ $y }}">{{ $y }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </template>
+
+                    {{-- Custom range --}}
+                    <template x-if="type === 'custom'">
+                        <div class="flex gap-2">
+                            <div class="form-control flex-1">
+                                <label class="label pb-1"><span class="label-text text-xs">Start date</span></label>
+                                <input type="date" name="start_date" x-model="startDate"
+                                       class="input input-sm input-bordered w-full" />
+                            </div>
+                            <div class="form-control flex-1">
+                                <label class="label pb-1"><span class="label-text text-xs">End date</span></label>
+                                <input type="date" name="end_date" x-model="endDate"
+                                       class="input input-sm input-bordered w-full" />
+                            </div>
+                        </div>
+                    </template>
+
+                    <div class="modal-action mt-2">
+                        <button type="submit" class="btn btn-primary btn-sm gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+                            </svg>
+                            Download CSV
+                        </button>
+                    </div>
+                </form>
+            </div>
+            <form method="dialog" class="modal-backdrop"><button>close</button></form>
+        </dialog>
+    @endif
+
     @if ($selectedDay)
         <div x-data
              x-init="$el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })"
@@ -143,7 +280,7 @@
                 </div>
 
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
-                    @if ($this->canCreateTimeEntries)
+                    @if ($this->canCreateTimeEntries && ! $this->editingEntries)
                         <button type="button"
                                 wire:click="{{ $creatingEntry ? 'cancelCreatingEntry' : 'startCreatingEntry' }}"
                                 class="btn btn-sm gap-2 text-xs {{ $creatingEntry ? 'btn-error' : 'btn-outline' }}">
@@ -159,17 +296,18 @@
                             <x-lucide-edit-2 class="w-4 h-4" />
                             <span>{{ $this->editingEntries ? __('Stop editing') : __('Manage entries') }}</span>
                         </button>
-                    @elseif (Laravel\Jetstream\Jetstream::hasRoles())
-                        <div class="text-xs sm:text-sm text-base-content/60">
-                            {{ __('Manage entries below') }}
-                        </div>
                     @endif
 
                     <div class="flex items-center gap-2">
-                        <a href="{{ route('reports.attendance.export', ['date' => $this->selectedDateIso]) }}"
-                           class="btn btn-xs btn-outline">
-                            Export
-                        </a>
+                        @if ($this->canExportAttendance)
+                            <a href="{{ route('reports.attendance.export', ['type' => 'daily', 'date' => $this->selectedDateIso]) }}"
+                               class="btn btn-sm btn-outline gap-1">
+                                <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>
+                                </svg>
+                                Export day
+                            </a>
+                        @endif
                         <button wire:click="selectDay({{ $selectedDay }})"
                                 class="btn btn-square btn-ghost btn-sm"
                                 aria-label="Close panel">
@@ -205,8 +343,8 @@
             {{-- Employee list --}}
             <div class="divide-y divide-base-200 max-h-80 overflow-y-auto">
 
-                {{-- New entry form --}}
-                @if ($creatingEntry)
+                {{-- New entry form — shown in standalone create mode OR inside manage-entries mode --}}
+                @if ($creatingEntry || ($this->editingEntries && $this->canCreateTimeEntries))
                     <div class="flex flex-col gap-3 p-3 sm:p-4 bg-base-200/40">
                         <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
 
@@ -214,7 +352,7 @@
                             <div class="form-control flex-1">
                                 <x-label value="{{ __('Employee') }}" class="text-[10px] sm:text-xs mb-1" />
                                 <select wire:model.defer="createForm.user_id"
-                                        class="select select-sm select-bordered w-full">
+                                        class="select select-sm select-bordered w-full py-0 text-sm">
                                     <option value="">{{ __('Select employee…') }}</option>
                                     @foreach ($this->selectableUsers as $selectableUser)
                                         <option value="{{ $selectableUser->id }}">{{ $selectableUser->name }}</option>

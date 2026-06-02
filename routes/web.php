@@ -26,7 +26,7 @@ Route::middleware([
     Route::delete('/users/{user}', [App\Http\Controllers\UsersController::class, 'destroy'])->name('users.destroy');
 });
 
-Route::middleware(['auth', 'verified', 'can:view-attendance'])
+Route::middleware(['auth', 'verified', 'can:viewAny,App\Models\TimeEntry'])
     ->prefix('reports')
     ->name('reports.attendance.')
     ->group(function () {
@@ -35,7 +35,8 @@ Route::middleware(['auth', 'verified', 'can:view-attendance'])
         Route::get('attendance', fn() => view('reports.attendance'))
             ->name('index');
 
-        // CSV export (plain controller, no Livewire needed)
+        // CSV export — additionally gated to admin + manager only
         Route::get('attendance/export', [AttendanceExportController::class, 'export'])
+            ->middleware('can:export,App\Models\TimeEntry')
             ->name('export');
     });

@@ -47,8 +47,6 @@ class AttendanceCalendar extends Component
 
     public function mount(): void
     {
-        Gate::authorize('viewAny', TimeEntry::class);
-
         $this->year  = $this->year  ?: now()->year;
         $this->month = $this->month ?: now()->month;
     }
@@ -98,7 +96,6 @@ class AttendanceCalendar extends Component
         $this->editingEntries = ! $this->editingEntries;
 
         if ($this->editingEntries) {
-            $this->cancelCreatingEntry();
             $this->initializeEntryEdits();
         } else {
             $this->stopEditingEntries();
@@ -119,6 +116,7 @@ class AttendanceCalendar extends Component
     {
         $this->editingEntries = false;
         $this->entryEdits     = [];
+        $this->cancelCreatingEntry();
     }
 
     public function deleteEntry(int $entryId): void
@@ -160,8 +158,6 @@ class AttendanceCalendar extends Component
 
     public function startCreatingEntry(): void
     {
-        $this->stopEditingEntries();
-
         $this->creatingEntry = true;
         $this->createForm    = [
             'user_id'   => null,
@@ -204,7 +200,16 @@ class AttendanceCalendar extends Component
             return;
         }
 
-        $this->cancelCreatingEntry();
+        // In edit mode keep the form open for the next entry; otherwise close it
+        if ($this->editingEntries) {
+            $this->createForm = [
+                'user_id'   => null,
+                'clock_in'  => '',
+                'clock_out' => null,
+            ];
+        } else {
+            $this->cancelCreatingEntry();
+        }
     }
 
     // ── Data ──────────────────────────────────────────────────────────────────
@@ -297,6 +302,13 @@ class AttendanceCalendar extends Component
     {
         return $this->currentUser() !== null
             && Gate::check('delete', new TimeEntry());
+    }
+
+    #[Computed]
+    public function canExportAttendance(): bool
+    {
+        return $this->currentUser() !== null
+            && Gate::check('export', TimeEntry::class);
     }
 
     // ── View helpers ──────────────────────────────────────────────────────────
