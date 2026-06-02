@@ -51,4 +51,13 @@ class TimeEntryPolicy
     {
         return $user->hasTeamPermission($user->currentTeam, 'update-time-entries');
     }
+
+    /**
+     * Only team owners (admin) and managers can export attendance data.
+     */
+    public function export(User $user): bool
+    {
+        return $user->ownsTeam($user->currentTeam)
+            || $user->hasTeamRole($user->currentTeam, 'manager');
+    }
 }
