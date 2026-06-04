@@ -1,6 +1,6 @@
 <div class="space-y-2 sm:space-y-4 w-full px-2 sm:px-0">
 
-    {{-- ── Month navigation + export trigger --}}
+    {{-- ── Month navigation --}}
     <div class="flex items-center justify-between">
         <button wire:click="prevMonth"
                 class="btn btn-square btn-ghost btn-xs sm:btn-sm text-base-content/60 hover:text-base-content"
@@ -10,10 +10,22 @@
             </svg>
         </button>
 
-        <div class="text-center">
-            <h2 class="text-base sm:text-lg font-semibold text-base-content dark:text-white">
-                {{ $this->calendarLabel }}
-            </h2>
+        <div class="flex items-center gap-1">
+            <select wire:model.live="month"
+                    class="select select-sm text-sm select-ghost focus:outline-none">
+                @foreach (range(1, 12) as $m)
+                    <option value="{{ $m }}"
+                            @disabled($year === now()->year && $m > now()->month)>
+                        {{ \Carbon\Carbon::create(null, $m)->translatedFormat('F') }}
+                    </option>
+                @endforeach
+            </select>
+            <select wire:model.live="year"
+                    class="select select-sm text-sm select-ghost focus:outline-none">
+                @foreach (range(now()->year, 2020) as $y)
+                    <option value="{{ $y }}">{{ $y }}</option>
+                @endforeach
+            </select>
             <span wire:loading class="text-xs text-base-content/50 dark:text-gray-400">Loading…</span>
         </div>
 
@@ -83,33 +95,35 @@
                         'text-base-content/50' => ! $isToday && ! $isSelected,
                     ])>{{ $day }}</div>
 
-                    {{-- Name pills — show max 2 (hidden on mobile, skeleton instead) --}}
-                    <div class="hidden sm:flex sm:flex-col sm:gap-0.5">
-                        @foreach ($entries->take(2) as $entry)
-                            @php $status = $entry->status(); @endphp
-                            <span @class([
-                                'badge badge-xs truncate text-[7px] sm:text-xs',
-                                'badge-success' => $status === 'in',
-                                'badge-warning' => $status === 'late',
-                                'badge-outline' => $status === 'out',
-                            ])>
-                                {{ explode(' ', $entry->user->name)[0] }}
+                    @if ($this->canViewTimeEntries)
+                        {{-- Name pills — show max 2 (hidden on mobile, skeleton instead) --}}
+                        <div class="hidden sm:flex sm:flex-col sm:gap-0.5">
+                            @foreach ($entries->take(2) as $entry)
+                                @php $status = $entry->status(); @endphp
+                                <span @class([
+                                    'badge badge-xs truncate text-[7px] sm:text-xs',
+                                    'badge-success' => $status === 'in',
+                                    'badge-warning' => $status === 'late',
+                                    'badge-outline' => $status === 'out',
+                                ])>
+                                    {{ explode(' ', $entry->user->name)[0] }}
+                                </span>
+                            @endforeach
+                        </div>
+
+                        {{-- Mobile skeleton loaders --}}
+                        <div class="sm:hidden flex flex-col gap-0.5">
+                            @foreach ($entries->take(2) as $entry)
+                                <div class="skeleton h-4 w-100 rounded"></div>
+                            @endforeach
+                        </div>
+
+                        {{-- +N more --}}
+                        @if ($entries->count() > 2)
+                            <span class="text-[8px] sm:text-[10px] text-base-content/50 px-0.5">
+                                +{{ $entries->count() - 2 }}
                             </span>
-                        @endforeach
-                    </div>
-
-                    {{-- Mobile skeleton loaders --}}
-                    <div class="sm:hidden flex flex-col gap-0.5">
-                        @foreach ($entries->take(2) as $entry)
-                            <div class="skeleton h-4 w-100 rounded"></div>
-                        @endforeach
-                    </div>
-
-                    {{-- +N more --}}
-                    @if ($entries->count() > 2)
-                        <span class="text-[8px] sm:text-[10px] text-base-content/50 px-0.5">
-                            +{{ $entries->count() - 2 }}
-                        </span>
+                        @endif
                     @endif
 
                 </div>
@@ -343,6 +357,7 @@
             {{-- Employee list --}}
             <div class="divide-y divide-base-200 max-h-80 overflow-y-auto">
 
+                @if ($this->canViewTimeEntries)
                 {{-- New entry form — shown in standalone create mode OR inside manage-entries mode --}}
                 @if ($creatingEntry || ($this->editingEntries && $this->canCreateTimeEntries))
                     <div class="flex flex-col gap-3 p-3 sm:p-4 bg-base-200/40">
@@ -477,6 +492,11 @@
                         No entries recorded for this day.
                     </div>
                 @endforelse
+                @else
+                    <div class="px-4 py-8 text-center text-sm text-base-content/60">
+                        You do not have permission to view time entries.
+                    </div>
+                @endif
 
             </div>
         </div>

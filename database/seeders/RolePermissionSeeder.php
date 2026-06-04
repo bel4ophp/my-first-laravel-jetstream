@@ -60,6 +60,7 @@ class RolePermissionSeeder extends Seeder
         // Employee: read-only, own data visible via policy ownership check
         $employee->permissions()->sync([
             $permissionModels['read']->id,
+            $permissionModels['view-attendance']->id,
         ]);
     }
 }

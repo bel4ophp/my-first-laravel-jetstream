@@ -98,19 +98,11 @@ class User extends Authenticatable
     }
 
     /**
-     * Check if the user is a manager in the given team.
+     * Check if the user holds the manager role on any team.
      */
     public function isTeamManager(): bool
     {
-        $firstTeam = $this->teams()->orderBy('created_at', 'asc')->first();
-
-        if (! $firstTeam) {
-            return false;
-        }
-
-        $role = $this->teamRole($firstTeam);
-
-        return $role && $role->key === 'manager';
+        return $this->teams()->wherePivot('role', 'manager')->exists();
     }
 
     public static function getTeamManager(int $teamId): ?User

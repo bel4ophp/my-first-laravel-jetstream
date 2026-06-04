@@ -22,11 +22,11 @@ class UserPolicy
     }
 
     /**
-     * View users list (admin + manager)
+     * View users list (admin only)
      */
     public function viewAny(User $user): bool
     {
-        return $user->hasTeamRole($user->currentTeam, 'manager');
+        return $user->is_admin || $user->ownsTeam($user->currentTeam);
     }
 
     /**
