@@ -74,6 +74,24 @@ class AttendanceCalendar extends Component
         $this->selectedDay = null;
     }
 
+    public function updatedYear(): void
+    {
+        if ($this->year === now()->year && $this->month > now()->month) {
+            $this->month = now()->month;
+        }
+        $this->selectedDay = null;
+        $this->stopEditingEntries();
+    }
+
+    public function updatedMonth(): void
+    {
+        if ($this->year === now()->year && $this->month > now()->month) {
+            $this->month = now()->month;
+        }
+        $this->selectedDay = null;
+        $this->stopEditingEntries();
+    }
+
     public function selectDay(int $day): void
     {
         if ($this->selectedDay === $day) {
@@ -251,6 +269,10 @@ class AttendanceCalendar extends Component
     #[Computed]
     public function entriesByDay(): Collection
     {
+        if (! $this->canViewTimeEntries) {
+            return collect();
+        }
+
         return TimeEntry::with('user')
             ->whereIn('user_id', $this->allowedUserIds)
             ->whereYear('work_day',  $this->year)
@@ -302,6 +324,18 @@ class AttendanceCalendar extends Component
     {
         return $this->currentUser() !== null
             && Gate::check('delete', new TimeEntry());
+    }
+
+    #[Computed]
+    public function canViewTimeEntries(): bool
+    {
+        $user = $this->currentUser();
+
+        if (! $user) {
+            return false;
+        }
+
+        return Gate::check('view', new TimeEntry(['user_id' => $user->id]));
     }
 
     #[Computed]

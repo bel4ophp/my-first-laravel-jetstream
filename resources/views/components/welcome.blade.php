@@ -29,24 +29,7 @@
             </div>
 
             <!-- RIGHT: Stats -->
-            <div class="flex-1 flex flex-col justify-center gap-4 pr-1">
-
-                <div class="text-center text-gray-900 dark:text-white">
-                    <p class="stat-value text-2xl font-semibold">523</p>
-                    <p class="stat-label">Posts</p>
-                </div>
-
-                <div class="text-center text-gray-900 dark:text-white">
-                    <p class="stat-value text-2xl font-semibold">1387</p>
-                    <p class="stat-label">Likes</p>
-                </div>
-
-                <div class="text-center text-gray-900 dark:text-white">
-                    <p class="stat-value text-2xl font-semibold">146</p>
-                    <p class="stat-label">Followers</p>
-                </div>
-
-            </div>
+            <livewire:work-stats />
 
         </div>
 
