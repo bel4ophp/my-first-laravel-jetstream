@@ -2254,10 +2254,10 @@
                 </p>
 
                 <div class="flex flex-wrap gap-3 mb-8">
-                    <div class="badge badge-outline badge-lg">SEO</div>
-                    <div class="badge badge-outline badge-lg">Branding</div>
-                    <div class="badge badge-outline badge-lg">Content</div>
-                    <div class="badge badge-outline badge-lg">Growth</div>
+                    <div class="badge badge-outline badge-info badge-lg">SEO</div>
+                    <div class="badge badge-outline badge-info badge-lg">Branding</div>
+                    <div class="badge badge-outline badge-info badge-lg">Content</div>
+                    <div class="badge badge-outline badge-info badge-lg">Growth</div>
                 </div>
 
                 <div class="flex gap-4">
@@ -2279,7 +2279,7 @@
 
         <div class="flex items-center justify-between mb-8">
             <div>
-                <h2 class="text-4xl font-black">
+                <h2 class="text-4xl font-black text-base-content">
                     Recent Articles
                 </h2>
 

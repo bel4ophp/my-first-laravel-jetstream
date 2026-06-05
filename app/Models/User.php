@@ -35,6 +35,7 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'is_admin',
     ];
 
     /**
@@ -68,6 +69,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_admin' => 'boolean',
         ];
     }
 
@@ -83,17 +85,31 @@ class User extends Authenticatable
 
     protected function roleName(): Attribute
     {
-        $firstTeam = $this->teams()->orderBy('created_at', 'asc')->first();
-        $role = $this->teamRole($firstTeam);
-
-        if($role->key === 'owner') {
-            $role->key = 'admin';
-        }
-
         return Attribute::make(
-            get: fn () => $role
-                ? Jetstream::findRole($role->key)->name
-                : 'n/a'
+            get: function () {
+                if ($this->is_admin) {
+                    return 'Administrator';
+                }
+
+                $team = $this->teams()->orderBy('created_at', 'asc')->first()
+                    ?? $this->ownedTeams()->where('personal_team', false)->orderBy('created_at', 'asc')->first();
+
+                if (! $team) {
+                    return 'n/a';
+                }
+
+                $role = $this->teamRole($team);
+
+                if (! $role) {
+                    return 'n/a';
+                }
+
+                if ($role->key === 'owner') {
+                    $role->key = 'admin';
+                }
+
+                return Jetstream::findRole($role->key)?->name ?? 'n/a';
+            }
         );
     }
 
