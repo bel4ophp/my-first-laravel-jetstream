@@ -2,6 +2,8 @@
 
 namespace Database\Seeders;
 
+use App\Models\Holiday;
+use App\Models\LeaveBalance;
 use App\Models\Team;
 use App\Models\TimeEntry;
 use App\Models\User;
@@ -19,6 +21,13 @@ class TeamSeeder extends Seeder
         ['name' => 'Epsilon Team', 'slug' => 'epsilon'],
     ];
 
+    /** @var array<int, string> */
+    private const HOLIDAYS = [
+        'New Year\'s Day',
+        'Labour Day',
+        'Christmas Day',
+    ];
+
     public function run(): void
     {
         $admin = User::where('email', 'admin@bel4o.dev')->firstOrFail();
@@ -30,6 +39,8 @@ class TeamSeeder extends Seeder
                 ['personal_team' => false]
             );
 
+            $this->seedHolidays($team);
+
             $manager = $this->createMember(
                 name: ucfirst($definition['slug']) . ' Manager',
                 email: "manager.{$definition['slug']}@bel4o.dev",
@@ -38,6 +49,7 @@ class TeamSeeder extends Seeder
             );
 
             $manager->current_team_id || $manager->switchTeam($team);
+            $this->seedLeaveBalance($manager);
 
             for ($i = 1; $i <= 3; $i++) {
                 $employee = $this->createMember(
@@ -50,6 +62,7 @@ class TeamSeeder extends Seeder
                 $employee->current_team_id || $employee->switchTeam($team);
 
                 $this->seedMonthlyEntries($employee);
+                $this->seedLeaveBalance($employee);
             }
 
             $firstTeam ??= $team;
@@ -75,6 +88,41 @@ class TeamSeeder extends Seeder
         }
 
         return $user;
+    }
+
+    private function seedHolidays(Team $team): void
+    {
+        $dates = [
+            Carbon::create(now()->year, 1, 1),
+            Carbon::create(now()->year, 5, 1),
+            Carbon::create(now()->year, 12, 25),
+        ];
+
+        foreach (self::HOLIDAYS as $index => $name) {
+            $date = $dates[$index];
+
+            if (Holiday::where('team_id', $team->id)->whereDate('date', $date)->exists()) {
+                continue;
+            }
+
+            Holiday::factory()->create([
+                'team_id' => $team->id,
+                'name' => $name,
+                'date' => $date->format('Y-m-d'),
+            ]);
+        }
+    }
+
+    private function seedLeaveBalance(User $user): void
+    {
+        if (LeaveBalance::where('user_id', $user->id)->where('year', now()->year)->exists()) {
+            return;
+        }
+
+        LeaveBalance::factory()->fresh()->create([
+            'user_id' => $user->id,
+            'year' => now()->year,
+        ]);
     }
 
     private function seedMonthlyEntries(User $user): void

@@ -20,6 +20,9 @@
                             {{ __('Users') }}
                         </x-nav-link>
                     @endcan
+                    <x-nav-link href="{{ route('leave.index') }}" :active="request()->routeIs('leave.index')">
+                        {{ __('Leave Request') }}
+                    </x-nav-link>
                 </div>
             </div>
 
@@ -186,6 +189,9 @@
                     {{ __('Users') }}
                 </x-responsive-nav-link>
             @endcan
+            <x-responsive-nav-link href="{{ route('leave.index') }}" :active="request()->routeIs('leave.index')">
+                {{ __('Leave Request') }}
+            </x-responsive-nav-link>
         </div>
 
         <!-- Responsive Settings Options -->

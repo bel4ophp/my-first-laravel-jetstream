@@ -2,7 +2,7 @@
     {{-- Clock In: only show when no entry for today --}}
     @if (!($clockInTime && $clockOutTime))
         <template x-if="!running">
-            <button class="h-full absolute inset-0 z-10 text-primary btn btn-soft btn-primary backdrop-blur-md bg-opacity-10 text-lg" @click="start()">Clock In</button>
+            <button class="h-full absolute inset-0 z-10 text-primary btn btn-soft btn-primary backdrop-blur-md bg-opacity-10 text-lg hover:text-base-300" @click="start()">Clock In</button>
         </template>
     @endif
     <div class="grid h-full w-full place-items-center">

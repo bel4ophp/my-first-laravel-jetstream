@@ -25,6 +25,9 @@ class RolePermissionSeeder extends Seeder
             'view-attendance'     => 'View Attendance Access',
             'create-time-entries' => 'Create Time Entries Access',
             'update-time-entries' => 'Update Time Entries Access',
+            // Leave
+            'create-leave-requests'  => 'Create Leave Requests Access',
+            'approve-leave-requests' => 'Approve Leave Requests Access',
         ];
 
         $permissionModels = [];
@@ -55,12 +58,15 @@ class RolePermissionSeeder extends Seeder
             $permissionModels['view-attendance']->id,
             $permissionModels['create-time-entries']->id,
             $permissionModels['update-time-entries']->id,
+            $permissionModels['create-leave-requests']->id,
+            $permissionModels['approve-leave-requests']->id,
         ]);
 
         // Employee: read-only, own data visible via policy ownership check
         $employee->permissions()->sync([
             $permissionModels['read']->id,
             $permissionModels['view-attendance']->id,
+            $permissionModels['create-leave-requests']->id,
         ]);
     }
 }
