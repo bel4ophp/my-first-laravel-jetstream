@@ -26,6 +26,14 @@ Route::middleware([
         Route::put('/users/{user}', [App\Http\Controllers\UsersController::class, 'update'])->name('users.update');
         Route::delete('/users/{user}', [App\Http\Controllers\UsersController::class, 'destroy'])->name('users.destroy');
     });
+
+    // Unified leave page — the Request tab is available to all roles, the
+    // Validation tab is gated per-policy inside the view.
+    Route::get('/leave', fn () => view('leave.index'))->name('leave.index');
+
+    // Redirects preserve links from previously sent notification emails.
+    Route::redirect('/leave-requests', '/leave');
+    Route::redirect('/leave-approvals', '/leave?tab=validation');
 });
 
 Route::middleware(['auth', 'verified', 'can:viewAny,App\Models\TimeEntry'])

@@ -15,13 +15,19 @@ class AttendanceCalendarCanViewTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * This suite needs an employee WITHOUT `view-attendance` to exercise the
+     * own-entries-only scoping fallback, so it overrides the DB-seeded roles
+     * with bespoke permission sets. Descriptions are required so these roles
+     * don't break later tests that render Jetstream's role list.
+     */
     protected function setUp(): void
     {
         parent::setUp();
 
-        Jetstream::role('admin',    'Administrator', ['*']);
-        Jetstream::role('manager',  'Manager',       ['read', 'update', 'view-attendance', 'create-time-entries', 'update-time-entries', 'add-team-member', 'update-team-member', 'remove-team-member']);
-        Jetstream::role('employee', 'Employee',      ['read']);
+        Jetstream::role('admin', 'Administrator', ['*'])->description('Administrator.');
+        Jetstream::role('manager', 'Manager', ['read', 'update', 'view-attendance', 'create-time-entries', 'update-time-entries', 'add-team-member', 'update-team-member', 'remove-team-member'])->description('Manager.');
+        Jetstream::role('employee', 'Employee', ['read'])->description('Employee.');
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
