@@ -18,10 +18,15 @@ class Holiday extends Model
         'date',
     ];
 
+    /**
+     * `date:Y-m-d` keeps writes as a plain date. A bare `date` cast writes
+     * "Y-m-d H:i:s", which MySQL silently truncates but SQLite stores verbatim
+     * — breaking `unique` lookups that compare against "Y-m-d".
+     */
     protected function casts(): array
     {
         return [
-            'date' => 'date',
+            'date' => 'date:Y-m-d',
         ];
     }
 

@@ -19,8 +19,7 @@
     <div x-show="open" @click.away="open = false" x-transition
         class="absolute left-[-8rem] sm:right-0 z-50 mt-3 w-80 max-w-sm
             bg-base-300
-            shadow-md shadow-accent/40"
-    >
+            shadow-md shadow-accent/40">
 
         <!-- Header -->
         <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
@@ -65,6 +64,13 @@
                             Clocked <span class="font-medium text-gray-700 dark:text-gray-300">
                                 {{ $notification->data['action'] ?? '' }}
                             </span>
+                        </p>
+
+                        <p class="text-[11px] text-gray-400 dark:text-gray-500 mt-1"
+                            title="{{ $notification->created_at->format('M j, Y g:i A') }}">
+                            {{ $notification->created_at->format('M j, Y g:i A') }}
+                            <span class="text-gray-300 dark:text-gray-600">·</span>
+                            {{ $notification->created_at->diffForHumans() }}
                         </p>
 
                     </div>

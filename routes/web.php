@@ -29,7 +29,7 @@ Route::middleware([
 
     // Unified leave page — the Request tab is available to all roles, the
     // Validation tab is gated per-policy inside the view.
-    Route::get('/leave', fn () => view('leave.index'))->name('leave.index');
+    Route::get('/leave', fn() => view('leave.index'))->name('leave.index');
 
     // Redirects preserve links from previously sent notification emails.
     Route::redirect('/leave-requests', '/leave');

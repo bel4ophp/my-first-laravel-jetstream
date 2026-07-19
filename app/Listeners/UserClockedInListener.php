@@ -5,9 +5,7 @@ namespace App\Listeners;
 use App\Events\UserClockedInEvent;
 use App\Models\User;
 use App\Notifications\UserClockedInNotification;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Notification;
 
 class UserClockedInListener
 {
@@ -31,16 +29,47 @@ class UserClockedInListener
         }
 
         $manager = User::getTeamManager($currentTeam->id);
+        $managerClockedIn = $manager && $manager->getKey() === $user->getKey();
 
-        Log::warning("Manager ");
-        Log::warning($manager);
-
-        if (!$manager) {
-            Log::warning("No manager found for team ID {$currentTeam->id} when user clocked in.");
-            return;
+        // Skip notifying the manager about their own clock-in.
+        if ($manager && ! $managerClockedIn) {
+            $manager->notify(
+                new UserClockedInNotification(
+                    $user,
+                    $event->timeEntry,
+                    'clock_in'
+                )
+            );
         }
 
-        $manager->notify(
+        // When the manager clocks in, their team's employees are notified
+        // in-app and by mail.
+        if ($managerClockedIn) {
+            $employees = $currentTeam->users()
+                ->wherePivot('role', 'employee')
+                ->whereKeyNot($user->getKey())
+                ->get();
+
+            Notification::send(
+                $employees,
+                new UserClockedInNotification(
+                    $user,
+                    $event->timeEntry,
+                    'clock_in'
+                )
+            );
+        }
+
+        // Global admins receive an in-app-only notification for every other
+        // user's clock-in. The clocking-in user and the team manager (who was
+        // already notified above) are excluded to avoid duplicate copies.
+        $admins = User::query()
+            ->where('is_admin', true)
+            ->whereKeyNot(array_filter([$user->getKey(), $manager?->getKey()]))
+            ->get();
+
+        Notification::send(
+            $admins,
             new UserClockedInNotification(
                 $user,
                 $event->timeEntry,

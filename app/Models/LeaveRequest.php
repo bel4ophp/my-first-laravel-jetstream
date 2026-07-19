@@ -26,13 +26,19 @@ class LeaveRequest extends Model
         'cancelled_at',
     ];
 
+    /**
+     * `date:Y-m-d` keeps writes as plain dates. A bare `date` cast writes
+     * "Y-m-d H:i:s", which MySQL truncates but SQLite stores verbatim —
+     * breaking range comparisons (e.g. a request starting exactly on a
+     * holiday date would fail a `start_date <= :date` overlap check).
+     */
     protected function casts(): array
     {
         return [
             'type' => LeaveType::class,
             'status' => LeaveStatus::class,
-            'start_date' => 'date',
-            'end_date' => 'date',
+            'start_date' => 'date:Y-m-d',
+            'end_date' => 'date:Y-m-d',
             'cancelled_at' => 'datetime',
         ];
     }

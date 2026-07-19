@@ -27,10 +27,17 @@ class UserClockedInNotification extends Notification implements ShouldQueue
     /**
      * Get the notification's delivery channels.
      *
+     * Global admins receive an in-app (database) notification only; everyone
+     * else (e.g. the team manager) also receives it by mail.
+     *
      * @return array<int, string>
      */
     public function via(object $notifiable): array
     {
+        if ($notifiable instanceof User && $notifiable->is_admin) {
+            return ['database'];
+        }
+
         return ['database', 'mail'];
     }
 
