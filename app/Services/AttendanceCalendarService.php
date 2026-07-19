@@ -36,11 +36,14 @@ class AttendanceCalendarService
     public function selectableUsers(User $user): Collection
     {
         if ($user->is_admin || $user->ownsTeam($user->currentTeam)) {
-            return User::orderBy('name')->get();
+            return User::where('is_admin', false)->orderBy('name')->get();
         }
 
         if ($user->currentTeam) {
-            return $user->currentTeam->allUsers()->sortBy('name')->values();
+            return $user->currentTeam->allUsers()
+                ->reject(fn (User $member) => $member->is_admin)
+                ->sortBy('name')
+                ->values();
         }
 
         return collect();

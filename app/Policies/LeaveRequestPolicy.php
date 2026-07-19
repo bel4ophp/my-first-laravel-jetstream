@@ -44,6 +44,14 @@ class LeaveRequestPolicy
     }
 
     /**
+     * Managers and the admin can manage leave settings (holidays + pool reset).
+     */
+    public function manageSettings(User $user): bool
+    {
+        return $user->hasTeamPermission($user->currentTeam, 'manage-leave-settings');
+    }
+
+    /**
      * Only the creator can cancel, and only while the request is still pending.
      */
     public function cancel(User $user, LeaveRequest $leaveRequest): bool

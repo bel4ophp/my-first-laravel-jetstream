@@ -28,6 +28,7 @@ class RolePermissionSeeder extends Seeder
             // Leave
             'create-leave-requests'  => 'Create Leave Requests Access',
             'approve-leave-requests' => 'Approve Leave Requests Access',
+            'manage-leave-settings'  => 'Manage Leave Settings Access',
         ];
 
         $permissionModels = [];
@@ -60,6 +61,7 @@ class RolePermissionSeeder extends Seeder
             $permissionModels['update-time-entries']->id,
             $permissionModels['create-leave-requests']->id,
             $permissionModels['approve-leave-requests']->id,
+            $permissionModels['manage-leave-settings']->id,
         ]);
 
         // Employee: read-only, own data visible via policy ownership check

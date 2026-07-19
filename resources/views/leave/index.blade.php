@@ -7,7 +7,14 @@
 
     @php
         $canApprove = auth()->user()->can('viewApprovals', App\Models\LeaveRequest::class);
-        $tab = request('tab') === 'validation' && $canApprove ? 'validation' : 'request';
+        $canManageSettings = auth()->user()->can('manageSettings', App\Models\LeaveRequest::class);
+
+        $requestedTab = request('tab');
+        $tab = match (true) {
+            $requestedTab === 'validation' && $canApprove => 'validation',
+            $requestedTab === 'settings' && $canManageSettings => 'settings',
+            default => 'request',
+        };
     @endphp
 
     <div class="py-8">
@@ -34,12 +41,28 @@
                         {{ __('Validation') }}
                     </a>
                 @endif
+
+                @if ($canManageSettings)
+                    <a href="{{ route('leave.index', ['tab' => 'settings']) }}"
+                        @class([
+                            'px-4 py-2 -mb-px text-sm font-medium border-b-2 transition',
+                            'border-indigo-500 text-indigo-600 dark:text-indigo-400' => $tab === 'settings',
+                            'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200' => $tab !== 'settings',
+                        ])>
+                        {{ __('Settings') }}
+                    </a>
+                @endif
             </nav>
 
             @if ($tab === 'validation')
                 <!-- Validation tab: managers + admin only -->
                 <div class="bg-base-300 shadow-sm rounded-xl border border-gray-200 dark:border-gray-700 p-6">
                     <livewire:leave-approvals />
+                </div>
+            @elseif ($tab === 'settings')
+                <!-- Settings tab: managers + admin only -->
+                <div class="bg-base-300 shadow-sm rounded-xl border border-gray-200 dark:border-gray-700 p-6">
+                    <livewire:leave-settings />
                 </div>
             @else
                 <!-- Request tab: visible to all roles -->

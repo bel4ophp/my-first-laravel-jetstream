@@ -20,8 +20,9 @@ export default defineConfig({
             cert: fs.readFileSync(env.VITE_SSL_CERT),
         } : false,
         hmr: {
-            // This is how the browser talks back to Vite for live updates
-            host: env.VITE_APP_URL,
+            // This is how the browser talks back to Vite for live updates.
+            // host must be the bare hostname — Vite adds the protocol itself.
+            host: env.VITE_APP_URL.replace(/^https?:\/\//, ''),
             protocol: hasCert ? 'wss' : 'ws',
         },
     },
