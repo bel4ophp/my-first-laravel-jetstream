@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\TeamRole;
 use App\Models\Team;
 use App\Models\TimeEntry;
 use App\Models\User;
@@ -242,5 +243,26 @@ class AttendanceExportTest extends TestCase
 
         $this->assertStringContainsString($owner->email, $content);
         $this->assertStringNotContainsString($otherOwner->email, $content);
+    }
+
+    /**
+     * The export and the calendar read their scope from the same place, so an
+     * owner's export covers every member of the teams they own — not just the
+     * members that happen to sit on their current team.
+     */
+    public function test_export_includes_members_of_the_owners_team(): void
+    {
+        $owner = $this->makeOwner();
+        $employee = User::factory()->create(['current_team_id' => $owner->currentTeam->id]);
+        $owner->currentTeam->users()->attach($employee, ['role' => TeamRole::Employee->value]);
+
+        TimeEntry::factory()->forDay('2026-04-01')->create(['user_id' => $employee->id]);
+
+        $content = $this->actingAs($owner)
+            ->get($this->exportUrl(['type' => 'monthly', 'year' => 2026, 'month' => 4]))
+            ->assertOk()
+            ->streamedContent();
+
+        $this->assertStringContainsString($employee->email, $content);
     }
 }

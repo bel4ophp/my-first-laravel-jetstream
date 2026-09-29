@@ -134,4 +134,52 @@ class UserClockedInNotificationTest extends TestCase
 
         Notification::assertNotSentTo($admin, UserClockedInNotification::class);
     }
+
+    // ── Mail body ─────────────────────────────────────────────────────────────
+
+    /**
+     * toMail() shipped as unedited scaffolding ("The introduction to the
+     * notification." linking to url('/')) and was mailed to a manager on every
+     * clock-in. Nothing asserted the body, so nothing caught it.
+     */
+    public function test_the_clock_in_email_says_who_clocked_in_and_when(): void
+    {
+        [$team, $manager] = $this->makeTeamWithManager();
+
+        $employee = User::factory()->create(['current_team_id' => $team->id]);
+        $team->users()->attach($employee, ['role' => 'employee']);
+
+        $entry = TimeEntry::factory()->forDay('2026-06-15')->create(['user_id' => $employee->id]);
+
+        $mail = (new UserClockedInNotification($employee, $entry, 'clock_in'))->toMail($manager);
+        $rendered = (string) $mail->render();
+
+        $this->assertStringContainsString($employee->name, $mail->subject);
+        $this->assertStringContainsString($entry->clockInFormatted(), $mail->subject);
+        $this->assertStringContainsString($manager->name, $rendered);
+        $this->assertStringContainsString('Jun 15, 2026', $rendered);
+
+        // Asserted on the message rather than the rendered HTML, which escapes
+        // the ampersand in the query string.
+        $this->assertSame(
+            route('reports.attendance.index', ['year' => 2026, 'month' => 6]),
+            $mail->actionUrl
+        );
+    }
+
+    public function test_the_clock_in_email_carries_no_scaffolding_text(): void
+    {
+        [$team, $manager] = $this->makeTeamWithManager();
+
+        $employee = User::factory()->create(['current_team_id' => $team->id]);
+        $entry = TimeEntry::factory()->forDay('2026-06-15')->create(['user_id' => $employee->id]);
+
+        $rendered = (string) (new UserClockedInNotification($employee, $entry, 'clock_in'))
+            ->toMail($manager)
+            ->render();
+
+        $this->assertStringNotContainsString('The introduction to the notification', $rendered);
+        $this->assertStringNotContainsString('Notification Action', $rendered);
+        $this->assertStringNotContainsString('Thank you for using our application', $rendered);
+    }
 }

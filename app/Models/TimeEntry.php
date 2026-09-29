@@ -2,30 +2,94 @@
 
 namespace App\Models;
 
-use App\Models\User;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
 
 class TimeEntry extends Model
 {
     use HasFactory;
+
     protected $fillable = [
         'user_id',
         'clock_in',
         'clock_out',
         'worked_minutes',
-        'work_day'
+        'work_day',
     ];
 
-    protected $casts = [
-        'clock_in' => 'datetime',
-        'clock_out' => 'datetime',
-    ];
+    /**
+     * `date:Y-m-d` keeps writes as a plain date, matching the DATE column and
+     * the other models in this app. A bare `date` cast writes "Y-m-d H:i:s",
+     * which MySQL truncates but SQLite stores verbatim — breaking the equality
+     * and range comparisons the onDay()/forMonth() scopes rely on.
+     */
+    protected function casts(): array
+    {
+        return [
+            'clock_in' => 'datetime',
+            'clock_out' => 'datetime',
+            'work_day' => 'date:Y-m-d',
+        ];
+    }
 
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    // ── Scopes ────────────────────────────────────────────────────────────────
+
+    /**
+     * Entries within the given month.
+     *
+     * Expressed as a range rather than whereYear()/whereMonth() so the
+     * (user_id, work_day) index stays usable; wrapping the column in a SQL
+     * function forces a full scan.
+     */
+    #[Scope]
+    protected function forMonth(Builder $query, int $year, int $month): void
+    {
+        $start = Carbon::create($year, $month, 1)->startOfMonth();
+
+        $query->whereBetween('work_day', [
+            $start->toDateString(),
+            $start->copy()->endOfMonth()->toDateString(),
+        ]);
+    }
+
+    /**
+     * Entries within the given year. Range-based for the same reason as forMonth().
+     */
+    #[Scope]
+    protected function forYear(Builder $query, int $year): void
+    {
+        $query->whereBetween('work_day', [
+            Carbon::create($year, 1, 1)->toDateString(),
+            Carbon::create($year, 12, 31)->toDateString(),
+        ]);
+    }
+
+    /**
+     * Entries for one work day. work_day is a DATE column, so an equality
+     * comparison is both correct and index-usable; whereDate() is not.
+     */
+    #[Scope]
+    protected function onDay(Builder $query, Carbon|string $day): void
+    {
+        $query->where('work_day', $day instanceof Carbon ? $day->toDateString() : $day);
+    }
+
+    /**
+     * Clocked in and not yet clocked out.
+     */
+    #[Scope]
+    protected function active(Builder $query): void
+    {
+        $query->whereNotNull('clock_in')->whereNull('clock_out');
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────

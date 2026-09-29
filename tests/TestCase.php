@@ -2,11 +2,10 @@
 
 namespace Tests;
 
-use App\Models\Role;
+use App\Providers\JetstreamServiceProvider;
 use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 use Illuminate\Support\Facades\Schema;
-use Laravel\Jetstream\Jetstream;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -20,10 +19,10 @@ abstract class TestCase extends BaseTestCase
     /**
      * Seed the application's roles/permissions and register them with Jetstream.
      *
-     * Tests boot in the console, where JetstreamServiceProvider skips its
-     * DB-driven role registration, so we mirror it here from the seeded data.
-     * This keeps test roles in lockstep with production (no permission drift)
-     * and guarantees every role carries a description.
+     * JetstreamServiceProvider boots before the test database has been migrated,
+     * so it finds no roles table and registers nothing. Booting it a second time
+     * against the seeded data puts tests on the same registration path as
+     * production, rather than mirroring that logic here where it could drift.
      */
     protected function seedAndRegisterRoles(): void
     {
@@ -33,12 +32,6 @@ abstract class TestCase extends BaseTestCase
 
         $this->seed(RolePermissionSeeder::class);
 
-        Role::with('permissions')->get()->each(function (Role $role) {
-            Jetstream::role(
-                $role->key,
-                $role->name,
-                $role->permissions->pluck('key')->all(),
-            )->description('Access managed via database.');
-        });
+        $this->app->register(JetstreamServiceProvider::class, force: true);
     }
 }

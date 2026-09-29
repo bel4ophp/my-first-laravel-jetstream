@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Enums\LeaveType;
+use App\Models\LeaveRequest;
 use App\Services\LeaveBalanceService;
 use App\Services\LeaveDayCalculator;
 use App\Services\LeaveRequestService;
@@ -42,8 +43,7 @@ class LeaveRequestForm extends Component
     #[Computed]
     public function availableTypes(): array
     {
-        return collect(LeaveType::cases())
-            ->reject(fn (LeaveType $type) => $type === LeaveType::Sick)
+        return collect(LeaveType::submittable())
             ->mapWithKeys(fn (LeaveType $type) => [$type->value => $type->label()])
             ->all();
     }
@@ -80,7 +80,7 @@ class LeaveRequestForm extends Component
 
     public function submit(): void
     {
-        $this->authorize('create', \App\Models\LeaveRequest::class);
+        $this->authorize('create', LeaveRequest::class);
 
         $validated = $this->validate([
             'type' => ['required', Rule::in(array_keys($this->availableTypes()))],

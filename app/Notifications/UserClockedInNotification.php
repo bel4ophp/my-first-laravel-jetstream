@@ -46,13 +46,22 @@ class UserClockedInNotification extends Notification implements ShouldQueue
      */
     public function toMail(object $notifiable): MailMessage
     {
+        $workDay = $this->timeEntry->work_day;
+
         return (new MailMessage)
-            ->line('The introduction to the notification.')
-            ->action('Notification Action', url('/'))
-            ->line('Thank you for using our application!');
+            ->subject($this->summary())
+            ->greeting("Hello {$notifiable->name},")
+            ->line("{$this->summary()} on {$workDay->toFormattedDateString()}.")
+            ->action('View Attendance', route('reports.attendance.index', [
+                'year' => $workDay->year,
+                'month' => $workDay->month,
+            ]));
     }
 
-    public function toDatabase($notifiable): array
+    /**
+     * @return array<string, mixed>
+     */
+    public function toDatabase(object $notifiable): array
     {
         return [
             'type' => 'time_tracker',
@@ -64,14 +73,14 @@ class UserClockedInNotification extends Notification implements ShouldQueue
     }
 
     /**
-     * Get the array representation of the notification.
-     *
-     * @return array<string, mixed>
+     * One line describing what happened, shared by the subject and the body so
+     * the two can't drift apart.
      */
-    public function toArray(object $notifiable): array
+    private function summary(): string
     {
-        return [
-            //
-        ];
+        return match ($this->action) {
+            'clock_out' => "{$this->employee->name} clocked out at ".($this->timeEntry->clockOutFormatted() ?? '—'),
+            default => "{$this->employee->name} clocked in at {$this->timeEntry->clockInFormatted()}",
+        };
     }
 }

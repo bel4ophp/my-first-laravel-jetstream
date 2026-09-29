@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Jetstream\AddTeamMember;
 use App\Enums\LeaveStatus;
 use App\Enums\LeaveType;
 use App\Livewire\LeaveApprovals;
@@ -13,6 +14,8 @@ use App\Notifications\LeaveRequestStatusChanged;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Validation\ValidationException;
+use Laravel\Jetstream\Http\Livewire\TeamMemberManager;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -250,5 +253,100 @@ class LeaveApprovalTest extends TestCase
 
         $this->assertTrue($ids->contains($managerRequest->id));
         $this->assertFalse($ids->contains($employeeRequest->id));
+    }
+
+    /**
+     * Guards the mismatch this replaced: the queue used to list every pending
+     * request on a team for anyone holding the approve permission, while the
+     * policy only let the resolved approver act — so a second manager was shown
+     * buttons that answered 403.
+     */
+    public function test_queue_only_lists_requests_the_viewer_can_actually_approve(): void
+    {
+        $owner = $this->makeOwner();
+        $manager = $this->makeManager($owner->currentTeam);
+        $employee = $this->makeEmployee($owner->currentTeam);
+
+        // Data that predates the single-manager rule: a second manager on the team.
+        $secondManager = User::factory()->create(['current_team_id' => $owner->currentTeam->id]);
+        $owner->currentTeam->users()->attach($secondManager, ['role' => 'manager']);
+
+        $request = $this->pendingRequest($employee, LeaveType::Annual, 2);
+
+        $ids = Livewire::actingAs($secondManager)
+            ->test(LeaveApprovals::class)
+            ->get('pendingRequests')
+            ->pluck('id');
+
+        $this->assertFalse($ids->contains($request->id));
+
+        // And the manager who *is* the approver still sees it.
+        $this->assertTrue(
+            Livewire::actingAs($manager)
+                ->test(LeaveApprovals::class)
+                ->get('pendingRequests')
+                ->pluck('id')
+                ->contains($request->id)
+        );
+    }
+
+    // ── One manager per team ──────────────────────────────────────────────────
+
+    public function test_a_second_manager_cannot_be_added_to_a_team(): void
+    {
+        $owner = $this->makeOwner();
+        $this->makeManager($owner->currentTeam);
+
+        $candidate = User::factory()->create();
+
+        $this->expectException(ValidationException::class);
+
+        app(AddTeamMember::class)->add($owner, $owner->currentTeam, $candidate->email, 'manager');
+    }
+
+    public function test_a_member_cannot_be_promoted_to_a_second_manager(): void
+    {
+        $owner = $this->makeOwner();
+        $this->makeManager($owner->currentTeam);
+        $employee = $this->makeEmployee($owner->currentTeam);
+
+        Livewire::actingAs($owner)
+            ->test(TeamMemberManager::class, ['team' => $owner->currentTeam])
+            ->set('managingRoleFor', $employee)
+            ->set('currentRole', 'manager')
+            ->call('updateRole')
+            ->assertHasErrors('role');
+
+        $this->assertTrue($employee->fresh()->hasTeamRole($owner->currentTeam->fresh(), 'employee'));
+    }
+
+    public function test_the_existing_manager_can_be_resaved_as_manager(): void
+    {
+        $owner = $this->makeOwner();
+        $manager = $this->makeManager($owner->currentTeam);
+
+        Livewire::actingAs($owner)
+            ->test(TeamMemberManager::class, ['team' => $owner->currentTeam])
+            ->set('managingRoleFor', $manager)
+            ->set('currentRole', 'manager')
+            ->call('updateRole')
+            ->assertHasNoErrors();
+
+        $this->assertTrue($manager->fresh()->hasTeamRole($owner->currentTeam->fresh(), 'manager'));
+    }
+
+    public function test_a_team_without_a_manager_still_accepts_one(): void
+    {
+        $owner = $this->makeOwner();
+        $employee = $this->makeEmployee($owner->currentTeam);
+
+        Livewire::actingAs($owner)
+            ->test(TeamMemberManager::class, ['team' => $owner->currentTeam])
+            ->set('managingRoleFor', $employee)
+            ->set('currentRole', 'manager')
+            ->call('updateRole')
+            ->assertHasNoErrors();
+
+        $this->assertTrue($owner->currentTeam->fresh()->manager()->is($employee));
     }
 }

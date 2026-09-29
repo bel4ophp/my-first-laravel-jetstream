@@ -223,4 +223,20 @@ class LeaveRecalculationTest extends TestCase
         $this->assertSame(5, $weekOne->fresh()->calculated_days);
         $this->assertSame(4, $weekTwo->fresh()->calculated_days);
     }
+
+    /**
+     * The owner is not on the team_user pivot, so scoping recalculation by
+     * Jetstream's users() relation skipped their requests entirely and left
+     * calculated_days stale.
+     */
+    public function test_a_holiday_also_recalculates_the_team_owners_own_request(): void
+    {
+        $owner = $this->team->owner;
+
+        $request = $this->makeRequest(['user_id' => $owner->id]);
+
+        $this->addHoliday();
+
+        $this->assertSame(4, $request->fresh()->calculated_days);
+    }
 }

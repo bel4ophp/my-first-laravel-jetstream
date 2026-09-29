@@ -2,46 +2,49 @@
 
 namespace App\Livewire\Notifications;
 
+use Illuminate\Contracts\View\View;
+use Illuminate\Notifications\DatabaseNotification;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
+use Livewire\Attributes\Computed;
 use Livewire\Component;
 
 class Dropdown extends Component
 {
-    public function getNotificationsProperty()
+    /**
+     * @return Collection<int, DatabaseNotification>
+     */
+    #[Computed]
+    public function notifications(): Collection
     {
-        return auth()->user()
+        return Auth::user()
             ->notifications()
             ->latest()
             ->limit(10)
             ->get();
     }
 
-    public function getUnreadCountProperty()
+    #[Computed]
+    public function unreadCount(): int
     {
-        return auth()->user()
-            ->unreadNotifications()
-            ->count();
+        return Auth::user()->unreadNotifications()->count();
     }
 
     public function markAsRead(string $id): void
     {
-        $notification = auth()->user()
-            ->notifications()
-            ->where('id', $id)
-            ->first();
+        Auth::user()->notifications()->where('id', $id)->first()?->markAsRead();
 
-        if ($notification) {
-            $notification->markAsRead();
-        }
+        unset($this->notifications, $this->unreadCount);
     }
 
     public function markAllAsRead(): void
     {
-        auth()->user()
-            ->unreadNotifications
-            ->markAsRead();
+        Auth::user()->unreadNotifications->markAsRead();
+
+        unset($this->notifications, $this->unreadCount);
     }
 
-    public function render()
+    public function render(): View
     {
         return view('livewire.notifications.dropdown');
     }

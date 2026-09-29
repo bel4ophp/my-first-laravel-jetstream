@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\LeaveStatus;
+use App\Enums\LeaveType;
 use App\Livewire\LeaveRequestForm;
 use App\Livewire\LeaveRequestList;
 use App\Models\LeaveBalance;
@@ -189,6 +190,38 @@ class LeaveRequestSubmissionTest extends TestCase
             ->assertHasErrors('type');
     }
 
+    /**
+     * The form offers exactly what LeaveType::submittable() allows, and the
+     * factory draws from the same list. The exclusion used to live only in the
+     * form, so fixtures could hold a sick-leave request that could never have
+     * been created through the UI.
+     */
+    public function test_the_form_offers_exactly_the_submittable_types(): void
+    {
+        $owner = $this->makeOwner();
+        $employee = $this->makeEmployee($owner->currentTeam);
+
+        $offered = Livewire::actingAs($employee)
+            ->test(LeaveRequestForm::class)
+            ->get('availableTypes');
+
+        $this->assertSame(
+            collect(LeaveType::submittable())->pluck('value')->all(),
+            array_keys($offered)
+        );
+        $this->assertArrayNotHasKey(LeaveType::Sick->value, $offered);
+    }
+
+    public function test_the_factory_never_produces_a_type_the_form_refuses(): void
+    {
+        $types = LeaveRequest::factory()->count(120)->make()->pluck('type');
+
+        $this->assertFalse($types->contains(LeaveType::Sick));
+        $this->assertTrue($types->every(
+            fn (LeaveType $type) => in_array($type, LeaveType::submittable(), true)
+        ));
+    }
+
     public function test_creator_can_cancel_their_pending_request(): void
     {
         $owner = $this->makeOwner();
@@ -241,5 +274,114 @@ class LeaveRequestSubmissionTest extends TestCase
             ->assertForbidden();
 
         $this->assertSame(LeaveStatus::Approved, $request->fresh()->status);
+    }
+
+    // ── Overlapping ranges ────────────────────────────────────────────────────
+
+    /**
+     * Reference working week: Mon 2026-06-15 .. Fri 2026-06-19.
+     */
+    private function submit(User $employee, string $start, string $end, string $type = 'annual')
+    {
+        return Livewire::actingAs($employee)
+            ->test(LeaveRequestForm::class)
+            ->set('type', $type)
+            ->set('startDate', $start)
+            ->set('endDate', $end)
+            ->call('submit');
+    }
+
+    private function employeeOnATeam(): User
+    {
+        $owner = $this->makeOwner();
+        $this->makeManager($owner->currentTeam);
+
+        return $this->makeEmployee($owner->currentTeam);
+    }
+
+    public function test_the_same_range_cannot_be_requested_twice(): void
+    {
+        $employee = $this->employeeOnATeam();
+
+        $this->submit($employee, '2026-06-15', '2026-06-19')->assertHasNoErrors();
+        $this->submit($employee, '2026-06-15', '2026-06-19')->assertHasErrors('startDate');
+
+        $this->assertDatabaseCount('leave_requests', 1);
+    }
+
+    public function test_a_partially_overlapping_range_is_rejected(): void
+    {
+        $employee = $this->employeeOnATeam();
+
+        $this->submit($employee, '2026-06-15', '2026-06-17')->assertHasNoErrors();
+
+        // Starts inside the existing range.
+        $this->submit($employee, '2026-06-17', '2026-06-19')->assertHasErrors('startDate');
+
+        $this->assertDatabaseCount('leave_requests', 1);
+    }
+
+    public function test_a_range_that_swallows_an_existing_one_is_rejected(): void
+    {
+        $employee = $this->employeeOnATeam();
+
+        $this->submit($employee, '2026-06-17', '2026-06-17')->assertHasNoErrors();
+        $this->submit($employee, '2026-06-15', '2026-06-19')->assertHasErrors('startDate');
+
+        $this->assertDatabaseCount('leave_requests', 1);
+    }
+
+    public function test_adjacent_ranges_are_allowed(): void
+    {
+        $employee = $this->employeeOnATeam();
+
+        $this->submit($employee, '2026-06-15', '2026-06-17')->assertHasNoErrors();
+
+        // Starts the day after the first one ends — no shared dates.
+        $this->submit($employee, '2026-06-18', '2026-06-19')->assertHasNoErrors();
+
+        $this->assertDatabaseCount('leave_requests', 2);
+    }
+
+    public function test_a_cancelled_request_releases_its_dates(): void
+    {
+        $employee = $this->employeeOnATeam();
+
+        $this->submit($employee, '2026-06-15', '2026-06-19')->assertHasNoErrors();
+
+        LeaveRequest::first()->update([
+            'status' => LeaveStatus::Cancelled,
+            'cancelled_at' => now(),
+        ]);
+
+        $this->submit($employee, '2026-06-15', '2026-06-19')->assertHasNoErrors();
+
+        $this->assertDatabaseCount('leave_requests', 2);
+    }
+
+    public function test_a_denied_request_releases_its_dates(): void
+    {
+        $employee = $this->employeeOnATeam();
+
+        $this->submit($employee, '2026-06-15', '2026-06-19')->assertHasNoErrors();
+
+        LeaveRequest::first()->update(['status' => LeaveStatus::Denied]);
+
+        $this->submit($employee, '2026-06-15', '2026-06-19')->assertHasNoErrors();
+
+        $this->assertDatabaseCount('leave_requests', 2);
+    }
+
+    public function test_another_users_request_does_not_block_the_same_dates(): void
+    {
+        $owner = $this->makeOwner();
+        $this->makeManager($owner->currentTeam);
+        $first = $this->makeEmployee($owner->currentTeam);
+        $second = $this->makeEmployee($owner->currentTeam);
+
+        $this->submit($first, '2026-06-15', '2026-06-19')->assertHasNoErrors();
+        $this->submit($second, '2026-06-15', '2026-06-19')->assertHasNoErrors();
+
+        $this->assertDatabaseCount('leave_requests', 2);
     }
 }

@@ -2,12 +2,15 @@
 
 namespace App\Services;
 
+use App\Enums\TeamRole;
 use App\Enums\LeaveStatus;
 use App\Enums\LeaveType;
 use App\Models\LeaveRequest;
 use App\Models\User;
 use App\Notifications\LeaveRequestStatusChanged;
 use App\Notifications\LeaveRequestSubmitted;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
@@ -19,14 +22,6 @@ class LeaveRequestService
         private LeaveBalanceService $balances,
         private LeaveApproverResolver $approverResolver,
     ) {}
-
-    /**
-     * Resolve who must approve a request submitted by the given user.
-     */
-    public function resolveApprover(User $submitter): ?User
-    {
-        return $this->approverResolver->resolve($submitter);
-    }
 
     /**
      * Create a pending leave request and notify its approver.
@@ -41,6 +36,12 @@ class LeaveRequestService
         if ($days < 1) {
             throw ValidationException::withMessages([
                 'startDate' => 'The selected range contains no working days (only weekends/holidays).',
+            ]);
+        }
+
+        if ($this->hasOverlappingRequest($user, $start, $end)) {
+            throw ValidationException::withMessages([
+                'startDate' => 'You already have a leave request covering part of this range.',
             ]);
         }
 
@@ -59,9 +60,29 @@ class LeaveRequestService
             'notes' => $notes,
         ]);
 
-        $this->resolveApprover($user)?->notify(new LeaveRequestSubmitted($leaveRequest));
+        $this->approverResolver->resolve($user)?->notify(new LeaveRequestSubmitted($leaveRequest));
 
         return $leaveRequest;
+    }
+
+    /**
+     * Whether the user already has a live request touching any of these dates.
+     *
+     * Two ranges overlap when each starts on or before the other ends. Only
+     * pending and approved requests block — denied and cancelled ones are
+     * terminal and release their dates.
+     *
+     * Without this, the same week could be requested any number of times: the
+     * pool is only debited at approval, so every duplicate passed the balance
+     * check and the over-draw surfaced later as an approval that failed.
+     */
+    private function hasOverlappingRequest(User $user, Carbon $start, Carbon $end): bool
+    {
+        return $user->leaveRequests()
+            ->whereIn('status', [LeaveStatus::Pending, LeaveStatus::Approved])
+            ->where('start_date', '<=', $end->toDateString())
+            ->where('end_date', '>=', $start->toDateString())
+            ->exists();
     }
 
     /**
@@ -75,19 +96,41 @@ class LeaveRequestService
             ->where('status', LeaveStatus::Pending)
             ->latest();
 
+        // The admin approves requests submitted by managers, on any team.
         if ($approver->is_admin) {
-            // The admin approves requests submitted by managers.
-            return $query->whereHas('user.teams', function ($q) {
-                $q->where('team_user.role', 'manager');
-            })->get();
+            return $query->whereIn('user_id', $this->submittersActingAs(TeamRole::Manager->value))->get();
         }
 
-        // A manager approves employees on their own team.
-        $teamId = $approver->currentTeam->id;
+        $team = $approver->currentTeam;
 
-        return $query->whereHas('user.teams', function ($q) use ($teamId) {
-            $q->where('teams.id', $teamId)->where('team_user.role', 'employee');
-        })->get();
+        // A team's single manager approves that team's employees. Anyone else
+        // holding the approve permission has nothing to act on.
+        if (! $approver->is($team?->manager())) {
+            return collect();
+        }
+
+        return $query->whereIn('user_id', $this->submittersActingAs(TeamRole::Employee->value, $team->id))->get();
+    }
+
+    /**
+     * Users whose role on their *own current team* is the given one.
+     *
+     * LeaveApproverResolver routes a request using the submitter's current team,
+     * so the queue has to be scoped the same way. Matching on team membership
+     * alone would surface requests the policy then refuses to approve.
+     *
+     * @return Builder<User>
+     */
+    private function submittersActingAs(string $role, ?int $teamId = null): Builder
+    {
+        return User::query()
+            ->join('team_user', function (JoinClause $join) use ($role) {
+                $join->on('team_user.user_id', '=', 'users.id')
+                    ->on('team_user.team_id', '=', 'users.current_team_id')
+                    ->where('team_user.role', $role);
+            })
+            ->when($teamId, fn (Builder $query) => $query->where('users.current_team_id', $teamId))
+            ->select('users.id');
     }
 
     /**

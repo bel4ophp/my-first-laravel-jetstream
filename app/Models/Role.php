@@ -2,13 +2,19 @@
 
 namespace App\Models;
 
-use App\Models\Permission;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Facades\Cache;
 
 class Role extends Model
 {
+    /**
+     * Where JetstreamServiceProvider caches the roles it registers with
+     * Jetstream. Anything that changes a role, a permission or the pivot
+     * between them has to clear it, so the key lives in one place.
+     */
+    public const CACHE_KEY = 'jetstream_roles_db';
+
     protected $fillable = ['key', 'name'];
 
     /**
@@ -20,11 +26,20 @@ class Role extends Model
     }
 
     /**
-     * Optimized boot method to clear Jetstream cache when roles change.
+     * Drop the registered-roles cache.
+     *
+     * Note this does NOT fire for pivot writes: attach/detach/sync on the
+     * permissions relation bypasses model events, so those callers (such as
+     * RolePermissionSeeder) must call this themselves.
      */
-    protected static function booted()
+    public static function forgetJetstreamCache(): void
     {
-        static::saved(fn () => Cache::forget('jetstream_roles_db'));
-        static::deleted(fn () => Cache::forget('jetstream_roles_db'));
+        Cache::forget(self::CACHE_KEY);
+    }
+
+    protected static function booted(): void
+    {
+        static::saved(fn () => self::forgetJetstreamCache());
+        static::deleted(fn () => self::forgetJetstreamCache());
     }
 }
