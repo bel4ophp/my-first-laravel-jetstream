@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Team;
 use App\Models\TimeEntry;
 use App\Models\User;
 use Illuminate\Support\Carbon;
@@ -12,19 +13,46 @@ class AttendanceCalendarService
 {
     /**
      * Returns the user IDs that $user is permitted to see entries for.
+     *
+     * The single definition of attendance visibility: the calendar and the CSV
+     * export both read from here, so they can never disagree about scope.
      */
     public function scopedUserIds(User $user, ?int $filterUserId): Collection
     {
+        $visible = $this->visibleUserIds($user);
+
+        // Narrowing to one employee may only pick from what is already visible.
         if ($filterUserId) {
-            return User::whereKey($filterUserId)->pluck('id');
+            return $visible->contains($filterUserId) ? collect([$filterUserId]) : collect();
         }
 
-        if ($user->is_admin || $user->ownsTeam($user->currentTeam)) {
+        return $visible;
+    }
+
+    /**
+     * Everyone whose entries $user may see, before any per-employee filter.
+     */
+    private function visibleUserIds(User $user): Collection
+    {
+        if ($user->is_admin) {
             return User::pluck('id');
         }
 
+        // A team owner sees their own teams — not every team in the system.
+        // Members and owners are eager loaded so memberIds() stays the single
+        // definition of team membership without costing two queries per team.
+        $ownedTeams = $user->ownedTeams()->with(['users', 'owner'])->get();
+
+        if ($ownedTeams->isNotEmpty()) {
+            return $ownedTeams
+                ->flatMap(fn (Team $team) => $team->memberIds())
+                ->push($user->id)
+                ->unique()
+                ->values();
+        }
+
         if ($user->currentTeam && Gate::check('viewAny', TimeEntry::class)) {
-            return $user->currentTeam->allUsers()->pluck('id');
+            return $user->currentTeam->memberIds();
         }
 
         return collect([$user->id]);
@@ -83,7 +111,7 @@ class AttendanceCalendarService
      */
     public function updateTimeEntry(TimeEntry $entry, string $clockIn, ?string $clockOut): void
     {
-        $date           = Carbon::parse($entry->work_day)->format('Y-m-d');
+        $date = $entry->work_day->toDateString();
         $parsedClockIn  = $this->parseClock($date, $clockIn);
         $parsedClockOut = null;
 

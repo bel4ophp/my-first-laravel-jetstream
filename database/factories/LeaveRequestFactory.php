@@ -21,7 +21,9 @@ class LeaveRequestFactory extends Factory
 
         return [
             'user_id' => User::factory(),
-            'type' => fake()->randomElement(LeaveType::cases()),
+            // Only types the app will actually accept — a fixture holding
+            // sick leave could never have been created through the form.
+            'type' => fake()->randomElement(LeaveType::submittable()),
             'start_date' => $startDate->format('Y-m-d'),
             'end_date' => $endDate->format('Y-m-d'),
             'calculated_days' => fake()->numberBetween(1, 5),

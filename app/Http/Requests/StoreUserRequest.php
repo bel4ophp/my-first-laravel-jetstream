@@ -2,7 +2,12 @@
 
 namespace App\Http\Requests;
 
+use App\Enums\TeamRole;
+use App\Models\Team;
+use App\Models\User;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Laravel\Jetstream\Rules\Role;
 
 class StoreUserRequest extends FormRequest
 {
@@ -11,7 +16,7 @@ class StoreUserRequest extends FormRequest
      */
     public function authorize(): bool
     {
-        return true;
+        return $this->user()->can('create', User::class);
     }
 
     /**
@@ -25,7 +30,28 @@ class StoreUserRequest extends FormRequest
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255|unique:users,email',
             'team_id' => 'required|exists:teams,id',
-            'role' => 'required|string',
+            'role' => ['required', 'string', new Role],
+        ];
+    }
+
+    /**
+     * Leave approval routes to a team's single manager, so a second one would
+     * leave requests with an ambiguous approver.
+     *
+     * @return array<int, \Closure>
+     */
+    public function after(): array
+    {
+        return [
+            function (Validator $validator) {
+                if ($this->input('role') !== TeamRole::Manager->value) {
+                    return;
+                }
+
+                if (Team::find($this->input('team_id'))?->hasManagerBesides()) {
+                    $validator->errors()->add('role', __('Only one manager is allowed per team.'));
+                }
+            },
         ];
     }
 

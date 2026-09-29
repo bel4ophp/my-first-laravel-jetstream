@@ -35,7 +35,7 @@ class LeaveRecalculationService
 
         return DB::transaction(function () use ($team, $dates) {
             $requests = LeaveRequest::query()
-                ->whereIn('user_id', $team->users()->pluck('users.id'))
+                ->whereIn('user_id', $team->memberIds())
                 ->whereIn('status', [LeaveStatus::Pending, LeaveStatus::Approved])
                 ->where(function ($query) use ($dates) {
                     foreach ($dates as $date) {

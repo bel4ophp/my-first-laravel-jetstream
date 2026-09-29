@@ -5,12 +5,21 @@ namespace App\Livewire;
 use App\Models\Team;
 use App\Models\TimeEntry;
 use App\Models\User;
+use App\Services\LeaveBalanceService;
+use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
 
 class WorkStats extends Component
 {
+    protected LeaveBalanceService $balances;
+
+    public function boot(LeaveBalanceService $balances): void
+    {
+        $this->balances = $balances;
+    }
+
     public bool $allTeams = false;
     public string $label = '';
     public string $monthlyHours = '0h';
@@ -28,7 +37,8 @@ class WorkStats extends Component
         $this->isOwner = $user->ownedTeams()->where('personal_team', false)->exists();
         $this->isManager = $user->isTeamManager();
 
-        $this->freeDays = '20/0';
+        $balance = $this->balances->currentBalance($user);
+        $this->freeDays = "{$balance->total_days}/{$balance->used_days}";
 
         if ($this->isOwner && $allTeams) {
             $this->label = 'All Teams';
@@ -46,15 +56,13 @@ class WorkStats extends Component
     private function computeMyMonthlyHours(User $user): string
     {
         $completedMinutes = TimeEntry::where('user_id', $user->id)
-            ->whereMonth('work_day', now()->month)
-            ->whereYear('work_day', now()->year)
+            ->forMonth(now()->year, now()->month)
             ->whereNotNull('worked_minutes')
             ->sum('worked_minutes');
 
         $hasActiveToday = TimeEntry::where('user_id', $user->id)
-            ->whereDate('work_day', today())
-            ->whereNotNull('clock_in')
-            ->whereNull('clock_out')
+            ->onDay(today())
+            ->active()
             ->exists();
 
         return floor(($completedMinutes + ($hasActiveToday ? 480 : 0)) / 60) . 'h';
@@ -71,15 +79,13 @@ class WorkStats extends Component
         $memberIds = $this->teamMemberIds($user);
 
         $completedMinutes = TimeEntry::whereIn('user_id', $memberIds)
-            ->whereMonth('work_day', now()->month)
-            ->whereYear('work_day', now()->year)
+            ->forMonth(now()->year, now()->month)
             ->whereNotNull('worked_minutes')
             ->sum('worked_minutes');
 
         $activeCount = TimeEntry::whereIn('user_id', $memberIds)
-            ->whereDate('work_day', today())
-            ->whereNotNull('clock_in')
-            ->whereNull('clock_out')
+            ->onDay(today())
+            ->active()
             ->count();
 
         return floor(($completedMinutes + ($activeCount * 480)) / 60) . 'h';
@@ -97,9 +103,8 @@ class WorkStats extends Component
         $memberIds = $members->pluck('id');
 
         $activeCount = TimeEntry::whereIn('user_id', $memberIds)
-            ->whereDate('work_day', today())
-            ->whereNotNull('clock_in')
-            ->whereNull('clock_out')
+            ->onDay(today())
+            ->active()
             ->count();
 
         return "{$activeCount} / {$members->count()}";
@@ -107,20 +112,18 @@ class WorkStats extends Component
 
     private function computeAllTeamsMonthlyHours(User $user): string
     {
-        $allMemberIds = $user->ownedTeams->where('personal_team', false)->flatMap(
+        $allMemberIds = $this->workTeams($user)->flatMap(
             fn ($team) => $this->nonAdminMembers($team)->pluck('id')
         )->unique()->values();
 
         $completedMinutes = TimeEntry::whereIn('user_id', $allMemberIds)
-            ->whereMonth('work_day', now()->month)
-            ->whereYear('work_day', now()->year)
+            ->forMonth(now()->year, now()->month)
             ->whereNotNull('worked_minutes')
             ->sum('worked_minutes');
 
         $activeCount = TimeEntry::whereIn('user_id', $allMemberIds)
-            ->whereDate('work_day', today())
-            ->whereNotNull('clock_in')
-            ->whereNull('clock_out')
+            ->onDay(today())
+            ->active()
             ->count();
 
         return floor(($completedMinutes + ($activeCount * 480)) / 60) . 'h';
@@ -128,17 +131,30 @@ class WorkStats extends Component
 
     private function computeAllTeamsActiveNow(User $user): string
     {
-        $allMembers = $user->ownedTeams->where('personal_team', false)->flatMap(
+        $allMembers = $this->workTeams($user)->flatMap(
             fn ($team) => $this->nonAdminMembers($team)
         )->unique('id');
 
         $activeCount = TimeEntry::whereIn('user_id', $allMembers->pluck('id'))
-            ->whereDate('work_day', today())
-            ->whereNotNull('clock_in')
-            ->whereNull('clock_out')
+            ->onDay(today())
+            ->active()
             ->count();
 
         return "{$activeCount} / {$allMembers->count()}";
+    }
+
+    /**
+     * The owner's non-personal teams, with members and owners eager loaded so
+     * nonAdminMembers() doesn't cost two queries per team.
+     *
+     * @return Collection<int, Team>
+     */
+    private function workTeams(User $user): Collection
+    {
+        return $user->ownedTeams()
+            ->where('personal_team', false)
+            ->with(['users', 'owner'])
+            ->get();
     }
 
     /** @return Collection<int, int> */
@@ -157,7 +173,7 @@ class WorkStats extends Component
         return $team->allUsers()->reject(fn (User $member) => $member->is_admin);
     }
 
-    public function render()
+    public function render(): View
     {
         return view('livewire.work-stats');
     }

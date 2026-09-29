@@ -105,7 +105,7 @@ class TeamSeeder extends Seeder
                 continue;
             }
 
-            Holiday::factory()->create([
+            Holiday::create([
                 'team_id' => $team->id,
                 'name' => $name,
                 'date' => $date->format('Y-m-d'),
@@ -119,9 +119,11 @@ class TeamSeeder extends Seeder
             return;
         }
 
-        LeaveBalance::factory()->fresh()->create([
+        LeaveBalance::create([
             'user_id' => $user->id,
             'year' => now()->year,
+            'total_days' => 20,
+            'used_days' => 0,
         ]);
     }
 

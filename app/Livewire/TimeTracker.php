@@ -4,100 +4,92 @@ namespace App\Livewire;
 
 use App\Events\UserClockedInEvent;
 use App\Models\TimeEntry;
-use App\Models\User;
-use App\Notifications\TimeTrackerNotification;
+use Illuminate\Contracts\View\View;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
 
 class TimeTracker extends Component
 {
-    public $entry;
-    public $elapsed;
+    public ?Carbon $clockInTime = null;
 
-    public $clockInTime = null;
-    public $clockOutTime = null;
-    public $workedMinutes = 0;
+    public ?Carbon $clockOutTime = null;
 
-    public $isRunning = false;
+    public int $workedMinutes = 0;
 
-    public function mount()
+    public bool $isRunning = false;
+
+    public function mount(): void
     {
         $this->loadEntry();
     }
 
-    public function loadEntry()
+    /**
+     * Today's entry for the signed-in user, or null before they clock in.
+     *
+     * Deliberately not a public property: Livewire would serialize the whole
+     * model into the component payload on every request.
+     */
+    private function todaysEntry(): ?TimeEntry
     {
-        $this->entry = TimeEntry::where('user_id', auth()->id())
-            ->whereDate('work_day', today())
+        return TimeEntry::where('user_id', Auth::id())
+            ->onDay(today())
             ->first();
-
-        // explicitly sync the values Alpine needs
-        $this->clockInTime = $this->entry?->clock_in;
-        $this->clockOutTime = $this->entry?->clock_out;
-        $this->workedMinutes = $this->entry?->worked_minutes ?? 0;
-
-        // Running if we have a clock-in but no clock-out yet
-        $this->isRunning = $this->clockInTime && !$this->clockOutTime;
     }
 
-    public function clockIn()
+    public function loadEntry(): void
+    {
+        $entry = $this->todaysEntry();
+
+        // Explicitly sync the values Alpine reads.
+        $this->clockInTime = $entry?->clock_in;
+        $this->clockOutTime = $entry?->clock_out;
+        $this->workedMinutes = $entry?->worked_minutes ?? 0;
+
+        // Running once there is a clock-in but no clock-out yet.
+        $this->isRunning = $this->clockInTime !== null && $this->clockOutTime === null;
+    }
+
+    public function clockIn(): void
     {
         if ($this->isRunning) {
             return;
         }
 
-        if ($this->entry) {
-            $this->entry->update([
-                'clock_in' => now(),
-            ]);
+        $entry = $this->todaysEntry();
+
+        if ($entry) {
+            $entry->update(['clock_in' => now()]);
         } else {
-            TimeEntry::create([
-                'user_id'  => auth()->id(),
+            $entry = TimeEntry::create([
+                'user_id' => Auth::id(),
                 'work_day' => today(),
                 'clock_in' => now(),
             ]);
         }
 
-        // always reload from DB
         $this->loadEntry();
 
-        event(new UserClockedInEvent(
-            auth()->user(),
-            $this->entry
-        ));
+        event(new UserClockedInEvent(Auth::user(), $entry));
     }
 
-    public function clockOut()
+    public function clockOut(): void
     {
-        if (!$this->isRunning || !$this->entry) {
+        $entry = $this->todaysEntry();
+
+        if (! $this->isRunning || ! $entry) {
             return;
         }
 
-        $this->entry->update([
+        $entry->update([
             'clock_out' => now(),
-            'worked_minutes' => $this->entry->clock_in->diffInMinutes(now())
+            'worked_minutes' => $entry->clock_in->diffInMinutes(now()),
         ]);
 
         $this->loadEntry();
-        // $this->notifyManager($this->entry, 'clock_out');
     }
 
-    private function notifyManager(TimeEntry $timeEntry, string $action)
-    {
-        $user = auth()->user();
-
-        // Get the team owner (manager) from the user's current team
-        $currentTeam = $user->currentTeam;
-
-        if ($currentTeam && $currentTeam->user_id !== $user->id) {
-            // Notify the team owner if the user is not the owner
-            $manager = User::find($currentTeam->user_id);
-            if ($manager) {
-                $manager->notify(new TimeTrackerNotification($user, $timeEntry, $action));
-            }
-        }
-    }
-
-    public function render()
+    public function render(): View
     {
         return view('livewire.time-tracker');
     }

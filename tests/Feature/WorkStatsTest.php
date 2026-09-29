@@ -3,9 +3,11 @@
 namespace Tests\Feature;
 
 use App\Livewire\WorkStats;
+use App\Models\LeaveBalance;
 use App\Models\Team;
 use App\Models\TimeEntry;
 use App\Models\User;
+use App\Services\LeaveBalanceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -269,5 +271,38 @@ class WorkStatsTest extends TestCase
 
         Livewire::test(WorkStats::class)
             ->assertSet('activeNow', '1 / 4');
+    }
+
+    // ── Free days ─────────────────────────────────────────────────────────────
+
+    public function test_free_days_reflects_the_users_actual_leave_balance(): void
+    {
+        $user = User::factory()->withPersonalTeam()->create();
+        LeaveBalance::factory()->create([
+            'user_id' => $user->id,
+            'year' => now()->year,
+            'total_days' => 25,
+            'used_days' => 7,
+        ]);
+
+        $this->actingAs($user);
+
+        Livewire::test(WorkStats::class)->assertSet('freeDays', '25/7');
+    }
+
+    public function test_free_days_falls_back_to_a_freshly_created_balance(): void
+    {
+        $user = User::factory()->withPersonalTeam()->create();
+
+        $this->actingAs($user);
+
+        Livewire::test(WorkStats::class)
+            ->assertSet('freeDays', LeaveBalanceService::DEFAULT_POOL_DAYS . '/0');
+
+        $this->assertDatabaseHas('leave_balances', [
+            'user_id' => $user->id,
+            'year' => now()->year,
+            'used_days' => 0,
+        ]);
     }
 }

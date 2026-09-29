@@ -15,6 +15,16 @@ class CreateTeam implements CreatesTeams
     /**
      * Validate and create a new team for the given user.
      *
+     * The creator owns the team via teams.user_id and is deliberately NOT
+     * attached to the team_user pivot — the same shape TeamSeeder produces, and
+     * what Team::memberIds() (via allUsers()) assumes. Ownership already grants
+     * every permission, so a pivot row would add nothing and would put the
+     * creator on a second team, which BelongsToNoOtherTeam forbids.
+     *
+     * A consequence worth knowing: a new team has no manager until one is
+     * assigned through the team members screen, so its employees' leave
+     * requests have no approver until then.
+     *
      * @param  array<string, string>  $input
      */
     public function create(User $user, array $input): Team
@@ -26,23 +36,6 @@ class CreateTeam implements CreatesTeams
         ])->validateWithBag('createTeam');
 
         AddingTeam::dispatch($user);
-
-        if($user->isTeamManager()) {
-            // Create the team directly
-            $team = Team::create([
-                'user_id' => $user->id, // still mark who created it
-                'name' => $input['name'],
-                'personal_team' => false,
-            ]);
-    
-            // Attach the current user with a custom role instead of 'owner'
-            $team->users()->attach($user, ['role' => $user->isTeamManager() ? 'manager' : 'admin']);
-    
-            // Switch the user into this team
-            $user->switchTeam($team);
-    
-            return $team;
-        }
 
         $user->switchTeam($team = $user->ownedTeams()->create([
             'name' => $input['name'],

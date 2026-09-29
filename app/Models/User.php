@@ -3,7 +3,8 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
-// use Database\Factories\UserFactory;
+use Database\Factories\UserFactory;
+use App\Enums\TeamRole;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -84,6 +85,14 @@ class User extends Authenticatable
     }
 
 
+    /**
+     * The display label for this user's role on their primary team.
+     *
+     * Memoised: resolving it costs two or three queries, and it is read inside
+     * the team-members loop, where every iteration asks the same signed-in user
+     * for the same answer. Caching is safe because the value only changes when
+     * team membership does, which cannot happen mid-request.
+     */
     protected function roleName(): Attribute
     {
         return Attribute::make(
@@ -92,8 +101,7 @@ class User extends Authenticatable
                     return 'Administrator';
                 }
 
-                $team = $this->teams()->orderBy('created_at', 'asc')->first()
-                    ?? $this->ownedTeams()->where('personal_team', false)->orderBy('created_at', 'asc')->first();
+                $team = $this->primaryTeam();
 
                 if (! $team) {
                     return 'n/a';
@@ -105,13 +113,25 @@ class User extends Authenticatable
                     return 'n/a';
                 }
 
-                if ($role->key === 'owner') {
-                    $role->key = 'admin';
-                }
+                // Jetstream reports a team's owner as the synthetic "owner"
+                // role; this app presents that as the administrator label.
+                $key = $role->key === TeamRole::Owner->value
+                    ? TeamRole::Admin->value
+                    : $role->key;
 
-                return Jetstream::findRole($role->key)?->name ?? 'n/a';
+                return Jetstream::findRole($key)?->name ?? 'n/a';
             }
-        );
+        )->shouldCache();
+    }
+
+    /**
+     * The team a user is presented as belonging to: the first they joined, or
+     * failing that the first non-personal team they own.
+     */
+    private function primaryTeam(): ?Team
+    {
+        return $this->teams()->oldest('created_at')->first()
+            ?? $this->ownedTeams()->where('personal_team', false)->oldest('created_at')->first();
     }
 
     /**
@@ -119,15 +139,21 @@ class User extends Authenticatable
      */
     public function isTeamManager(): bool
     {
-        return $this->teams()->wherePivot('role', 'manager')->exists();
+        return $this->teams()->wherePivot('role', TeamRole::Manager->value)->exists();
     }
 
+    /**
+     * The manager of the given team, or null when none is assigned.
+     *
+     * A team has at most one manager, so the ordering only matters for data
+     * that predates that constraint; it keeps the result stable either way.
+     */
     public static function getTeamManager(int $teamId): ?User
     {
         return User::whereHas('teams', function ($query) use ($teamId) {
             $query->where('teams.id', $teamId)
-                ->where('team_user.role', 'manager');
-        })->first();
+                ->where('team_user.role', TeamRole::Manager->value);
+        })->orderBy('id')->first();
     }
 
     public function leaveRequests(): HasMany

@@ -70,5 +70,10 @@ class RolePermissionSeeder extends Seeder
             $permissionModels['view-attendance']->id,
             $permissionModels['create-leave-requests']->id,
         ]);
+
+        // Role and Permission both forget this key on save, but sync() writes
+        // straight to the pivot table without firing model events, so the
+        // role-to-permission mapping above would otherwise stay cached.
+        Role::forgetJetstreamCache();
     }
 }

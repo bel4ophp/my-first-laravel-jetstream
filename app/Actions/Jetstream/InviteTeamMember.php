@@ -2,22 +2,26 @@
 
 namespace App\Actions\Jetstream;
 
+use App\Enums\TeamRole;
 use App\Models\Team;
 use App\Models\User;
 use Closure;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Laravel\Jetstream\Contracts\InvitesTeamMembers;
 use Laravel\Jetstream\Events\InvitingTeamMember;
 use Laravel\Jetstream\Jetstream;
 use Laravel\Jetstream\Mail\TeamInvitation;
 use Laravel\Jetstream\Rules\Role;
-use App\Rules\TeamManager;
+use App\Rules\BelongsToNoOtherTeam;
 
 class InviteTeamMember implements InvitesTeamMembers
 {
@@ -30,37 +34,75 @@ class InviteTeamMember implements InvitesTeamMembers
 
         $this->validate($user, $team, $email, $role);
 
-        try {
-            Jetstream::findUserByEmailOrFail($email);
+        // Branch on whether the account exists, rather than on an exception.
+        // This previously sat in a try/catch around the whole flow, so a failed
+        // mail send or invitation insert was read as "no such user" and fell
+        // through to account creation — which then hit the unique-email
+        // constraint and surfaced as a 500 with an orphaned invitation row.
+        User::where('email', $email)->exists()
+            ? $this->sendInvitation($team, $email, $role)
+            : $this->provisionMember($team, $email, $role);
+    }
 
-            InvitingTeamMember::dispatch($team, $email, $role);
+    /**
+     * Invite someone who already has an account.
+     */
+    protected function sendInvitation(Team $team, string $email, ?string $role): void
+    {
+        InvitingTeamMember::dispatch($team, $email, $role);
 
-            $invitation = $team->teamInvitations()->create([
+        $invitation = $team->teamInvitations()->create([
+            'email' => $email,
+            'role' => $role,
+        ]);
+
+        Log::info("Team invitation created for {$email} on team {$team->id}.");
+
+        Mail::to($email)->send(new TeamInvitation($invitation));
+    }
+
+    /**
+     * Create an account for an unknown address and put them straight on the
+     * team, then let them set their own password.
+     *
+     * No invitation row is written for this path — the membership already
+     * exists, so there is nothing left to accept.
+     */
+    protected function provisionMember(Team $team, string $email, ?string $role): void
+    {
+        Log::info("No account for {$email}; provisioning one for team {$team->id}.");
+
+        $newTeamMember = DB::transaction(function () use ($team, $email, $role) {
+            $member = User::create([
+                'name' => $this->nameFromEmail($email),
                 'email' => $email,
-                'role' => $role,
+                'password' => Hash::make(Str::random(32)),
             ]);
 
-            Log::error("User with email {$email} found. Sending invitation.");
+            $team->users()->attach($member, ['role' => $role]);
+            $member->switchTeam($team);
 
-            Mail::to($email)->send(new TeamInvitation($invitation));
-        } catch (\Throwable $th) {
-            Log::error("User with email {$email} not found. Creating new user and sending password reset link.");
-            $newTeamMember = User::create([
-                'name' => $email,
-                'email' => $email,
-                'password' => bcrypt(str()->random(16)), // random password
-            ]);
+            return $member;
+        });
 
-            // Assign user to selected team if provided
-            $team->users()->attach($newTeamMember, ['role' => $role]);
-            $newTeamMember->switchTeam($team);
+        // Outside the transaction: a mail failure must not roll back the member.
+        $newTeamMember->sendPasswordResetNotification(
+            Password::createToken($newTeamMember)
+        );
+    }
 
-            // Generate password reset token
-            $token = Password::createToken($newTeamMember);
-
-            // Send password reset notification
-            $newTeamMember->sendPasswordResetNotification($token);
-        }
+    /**
+     * A readable placeholder name until the user sets their own. The address
+     * itself used to be stored, so the members list showed raw emails.
+     */
+    protected function nameFromEmail(string $email): string
+    {
+        return Str::of($email)
+            ->before('@')
+            ->replace(['.', '_', '-', '+'], ' ')
+            ->squish()
+            ->headline()
+            ->value();
     }
 
     /**
@@ -75,8 +117,7 @@ class InviteTeamMember implements InvitesTeamMembers
             'email.unique' => __('This user has already been invited to the team.'),
         ])
             ->after($this->ensureUserIsNotAlreadyOnTeam($team, $email))
-            ->after($this->ensureUserIsNotAlreadyOnAnyTeam($email))
-            ->after($this->ensureOnlyOneManagerPerTeamUnlessAdmin($team, $role, $user))
+            ->after($this->ensureTeamHasOnlyOneManager($team, $role))
             ->validateWithBag('addTeamMember');
     }
 
@@ -94,7 +135,7 @@ class InviteTeamMember implements InvitesTeamMembers
                 Rule::unique(Jetstream::teamInvitationModel())->where(function (Builder $query) use ($team) {
                     $query->where('team_id', $team->id);
                 }),
-                new TeamManager,
+                new BelongsToNoOtherTeam($team),
             ],
             'role' => Jetstream::hasRoles() ? ['required', 'string', new Role] : null,
         ]);
@@ -114,37 +155,18 @@ class InviteTeamMember implements InvitesTeamMembers
         };
     }
 
-    protected function ensureUserIsNotAlreadyOnAnyTeam(string $email): Closure
-    {
-        return function ($validator) use ($email) {
-            $user = User::where('email', $email)->first();
-
-            if (! $user) {
-                return;
-            }
-
-            // Checks if user belongs to any team
-            if ($user->teams()->exists()) {
-                $validator->errors()->add(
-                    'email',
-                    __('This user already belongs to another team.')
-                );
-            }
-        };
-    }
-
     /**
-     * Ensure that only one manager is allowed per team unless the user is the team admin.
+     * Leave approval routes to a team's single manager, so a second one would
+     * leave requests with an ambiguous approver.
      */
-    protected function ensureOnlyOneManagerPerTeamUnlessAdmin(Team $team, ?string $role, User $user): Closure
+    protected function ensureTeamHasOnlyOneManager(Team $team, ?string $role): Closure
     {
-        return function ($validator) use ($team, $role, $user) {
-            if ($role === 'manager') {
-                $hasManager = $team->users()->wherePivot('role', 'manager')->exists();
-                if ($hasManager) {
-                    $validator->errors()->add('role', __('Only one manager is allowed per team.'));
-                }
-            }
+        return function ($validator) use ($team, $role) {
+            $validator->errors()->addIf(
+                $role === TeamRole::Manager->value && $team->hasManagerBesides(),
+                'role',
+                __('Only one manager is allowed per team.')
+            );
         };
     }
 }

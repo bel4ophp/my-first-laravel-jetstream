@@ -3,10 +3,12 @@
 namespace Tests\Feature;
 
 use App\Livewire\AttendanceCalendar;
+use App\Services\AttendanceCalendarService;
 use App\Models\Team;
 use App\Models\TimeEntry;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Laravel\Jetstream\Jetstream;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -143,5 +145,44 @@ class AttendanceCalendarCanViewTest extends TestCase
             ->test(AttendanceCalendar::class);
 
         $this->assertTrue($component->get('entriesByDay')->isEmpty());
+    }
+
+    // ── Scoping cost ──────────────────────────────────────────────────────────
+
+    /**
+     * An owner's visible set is built by walking their owned teams, so it used
+     * to cost two queries per team. Asserting the count is *constant* rather
+     * than pinning a number keeps this honest if the query shape changes.
+     */
+    public function test_an_owners_scope_costs_the_same_regardless_of_how_many_teams_they_own(): void
+    {
+        $service = app(AttendanceCalendarService::class);
+
+        $withOneTeam = $this->makeOwner();
+        $this->makeEmployee($withOneTeam->currentTeam);
+
+        $withFourTeams = $this->makeOwner();
+        for ($i = 0; $i < 3; $i++) {
+            $extra = Team::forceCreate([
+                'user_id' => $withFourTeams->id,
+                'name' => "Extra Team {$i}",
+                'personal_team' => false,
+            ]);
+            $this->makeEmployee($extra);
+        }
+        $this->makeEmployee($withFourTeams->currentTeam);
+
+        $countQueries = function (User $owner) use ($service): int {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $service->scopedUserIds($owner->fresh(), null);
+            $count = count(DB::getQueryLog());
+            DB::disableQueryLog();
+
+            return $count;
+        };
+
+        $this->assertSame(4, $withFourTeams->fresh()->ownedTeams()->count());
+        $this->assertSame($countQueries($withOneTeam), $countQueries($withFourTeams));
     }
 }

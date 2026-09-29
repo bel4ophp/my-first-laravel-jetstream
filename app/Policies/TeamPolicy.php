@@ -10,15 +10,6 @@ class TeamPolicy
 {
     use HandlesAuthorization;
 
-    public function before(User $user)
-    {
-        if ($user->is_admin) {
-            return true; // admin can do everything, skip other checks
-        }
-
-        return null; // continue to specific policy method
-    }
-
     /**
      * Determine whether the user can view any models.
      */

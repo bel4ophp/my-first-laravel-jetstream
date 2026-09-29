@@ -4,37 +4,20 @@ namespace App\Events;
 
 use App\Models\TimeEntry;
 use App\Models\User;
-use Illuminate\Broadcasting\Channel;
-use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PresenceChannel;
-use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
 
+/**
+ * Handled in-process by UserClockedInListener, which sends the notifications.
+ * Not broadcast — the scaffolded broadcastOn() pointed at a placeholder
+ * channel and the class never implemented ShouldBroadcast, so it was dead.
+ */
 class UserClockedInEvent
 {
-    use Dispatchable, InteractsWithSockets, SerializesModels;
+    use Dispatchable, SerializesModels;
 
-    /**
-     * Create a new event instance.
-     */
     public function __construct(
         public User $user,
-        public TimeEntry $timeEntry)
-    {
-        //
-    }
-
-    /**
-     * Get the channels the event should broadcast on.
-     *
-     * @return array<int, Channel>
-     */
-    public function broadcastOn(): array
-    {
-        return [
-            new PrivateChannel('channel-name'),
-        ];
-    }
+        public TimeEntry $timeEntry,
+    ) {}
 }

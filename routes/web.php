@@ -1,8 +1,7 @@
 <?php
 
 use App\Http\Controllers\AttendanceExportController;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Request;
+use App\Http\Controllers\UsersController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -18,14 +17,11 @@ Route::middleware([
         return view('dashboard');
     })->name('dashboard');
 
-    Route::middleware('can:viewAny,App\Models\User')->group(function () {
-        Route::get('/users', [App\Http\Controllers\UsersController::class, 'index'])->name('users.index');
-        Route::get('/users/create', [App\Http\Controllers\UsersController::class, 'create'])->name('users.create');
-        Route::post('/users', [App\Http\Controllers\UsersController::class, 'store'])->name('users.store');
-        Route::get('/users/{user}/edit', [App\Http\Controllers\UsersController::class, 'edit'])->name('users.edit');
-        Route::put('/users/{user}', [App\Http\Controllers\UsersController::class, 'update'])->name('users.update');
-        Route::delete('/users/{user}', [App\Http\Controllers\UsersController::class, 'destroy'])->name('users.destroy');
-    });
+    // `can:viewAny` only gates entry to the screen; each action additionally
+    // authorizes against the target user via UserPolicy.
+    Route::resource('users', UsersController::class)
+        ->except('show')
+        ->middleware('can:viewAny,App\Models\User');
 
     // Unified leave page — the Request tab is available to all roles, the
     // Validation tab is gated per-policy inside the view.

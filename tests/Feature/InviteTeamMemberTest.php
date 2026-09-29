@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Actions\Jetstream\InviteTeamMember;
 use App\Models\User;
 use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -92,5 +93,56 @@ class InviteTeamMemberTest extends TestCase
         $this->assertNotNull($newUser);
         $this->assertTrue($user->currentTeam->fresh()->hasUser($newUser));
         Notification::assertSentTo($newUser, ResetPassword::class);
+    }
+
+    public function test_a_provisioned_member_gets_a_readable_placeholder_name(): void
+    {
+        if (! Features::sendsTeamInvitations()) {
+            $this->markTestSkipped('Team invitations not enabled.');
+        }
+
+        Notification::fake();
+
+        $this->actingAs($user = User::factory()->withPersonalTeam()->create());
+
+        Livewire::test(TeamMemberManager::class, ['team' => $user->currentTeam])
+            ->set('addTeamMemberForm', [
+                'email' => 'ada.lovelace@example.com',
+                'role' => 'employee',
+            ])->call('addTeamMember');
+
+        $this->assertSame('Ada Lovelace', User::where('email', 'ada.lovelace@example.com')->value('name'));
+    }
+
+    /**
+     * The whole flow used to sit in one try/catch whose handler assumed "no
+     * such user". A mail failure for an *existing* address therefore fell
+     * through to account creation, hit the unique-email constraint, and
+     * surfaced as a 500 with an orphaned invitation row.
+     */
+    public function test_a_mail_failure_does_not_try_to_create_a_duplicate_account(): void
+    {
+        if (! Features::sendsTeamInvitations()) {
+            $this->markTestSkipped('Team invitations not enabled.');
+        }
+
+        $this->actingAs($user = User::factory()->withPersonalTeam()->create());
+        $existing = User::factory()->create(['email' => 'existing@example.com']);
+
+        Mail::shouldReceive('to')->once()->andThrow(new \RuntimeException('SMTP is down'));
+
+        try {
+            app(InviteTeamMember::class)->invite(
+                $user, $user->currentTeam, $existing->email, 'employee'
+            );
+            $this->fail('Expected the mail failure to surface.');
+        } catch (\RuntimeException $e) {
+            // The transport error reaches the caller instead of being
+            // reinterpreted as a missing account.
+            $this->assertSame('SMTP is down', $e->getMessage());
+        }
+
+        // Exactly one account for that address — no duplicate was attempted.
+        $this->assertSame(1, User::where('email', 'existing@example.com')->count());
     }
 }

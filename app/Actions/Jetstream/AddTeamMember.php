@@ -2,6 +2,8 @@
 
 namespace App\Actions\Jetstream;
 
+use App\Enums\TeamRole;
+use App\Rules\BelongsToNoOtherTeam;
 use App\Models\Team;
 use App\Models\User;
 use Closure;
@@ -44,11 +46,12 @@ class AddTeamMember implements AddsTeamMembers
         Validator::make([
             'email' => $email,
             'role' => $role,
-        ], $this->rules(), [
+        ], $this->rules($team), [
             'email.exists' => __('We were unable to find a registered user with this email address.'),
-        ])->after(
-            $this->ensureUserIsNotAlreadyOnTeam($team, $email)
-        )->validateWithBag('addTeamMember');
+        ])
+            ->after($this->ensureUserIsNotAlreadyOnTeam($team, $email))
+            ->after($this->ensureTeamHasOnlyOneManager($team, $role))
+            ->validateWithBag('addTeamMember');
     }
 
     /**
@@ -56,10 +59,10 @@ class AddTeamMember implements AddsTeamMembers
      *
      * @return array<string, Rule|array|string>
      */
-    protected function rules(): array
+    protected function rules(Team $team): array
     {
         return array_filter([
-            'email' => ['required', 'email', 'exists:users'],
+            'email' => ['required', 'email', 'exists:users', new BelongsToNoOtherTeam($team)],
             'role' => Jetstream::hasRoles() ? ['required', 'string', new Role] : null,
         ]);
     }
@@ -74,6 +77,21 @@ class AddTeamMember implements AddsTeamMembers
                 $team->hasUserWithEmail($email),
                 'email',
                 __('This user already belongs to the team.')
+            );
+        };
+    }
+
+    /**
+     * Leave approval routes to a team's single manager, so a second one would
+     * leave requests with an ambiguous approver.
+     */
+    protected function ensureTeamHasOnlyOneManager(Team $team, ?string $role): Closure
+    {
+        return function ($validator) use ($team, $role) {
+            $validator->errors()->addIf(
+                $role === TeamRole::Manager->value && $team->hasManagerBesides(),
+                'role',
+                __('Only one manager is allowed per team.')
             );
         };
     }

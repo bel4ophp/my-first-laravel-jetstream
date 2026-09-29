@@ -2,6 +2,7 @@
 
 namespace App\Listeners;
 
+use App\Enums\TeamRole;
 use App\Events\UserClockedInEvent;
 use App\Models\User;
 use App\Notifications\UserClockedInNotification;
@@ -9,14 +10,6 @@ use Illuminate\Support\Facades\Notification;
 
 class UserClockedInListener
 {
-    /**
-     * Create the event listener.
-     */
-    public function __construct()
-    {
-        //
-    }
-
     /**
      * Handle the event.
      */
@@ -46,7 +39,7 @@ class UserClockedInListener
         // in-app and by mail.
         if ($managerClockedIn) {
             $employees = $currentTeam->users()
-                ->wherePivot('role', 'employee')
+                ->wherePivot('role', TeamRole::Employee->value)
                 ->whereKeyNot($user->getKey())
                 ->get();
 

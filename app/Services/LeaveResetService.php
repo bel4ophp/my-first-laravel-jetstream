@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\TeamRole;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
@@ -21,7 +22,7 @@ class LeaveResetService
     {
         if ($actor->is_admin) {
             return User::whereHas('teams', function ($query) {
-                $query->whereIn('team_user.role', ['manager', 'employee']);
+                $query->whereIn('team_user.role', [TeamRole::Manager->value, TeamRole::Employee->value]);
             })->pluck('id');
         }
 
@@ -29,7 +30,7 @@ class LeaveResetService
 
         return User::whereHas('teams', function ($query) use ($teamId) {
             $query->where('teams.id', $teamId)
-                ->whereIn('team_user.role', ['manager', 'employee']);
+                ->whereIn('team_user.role', [TeamRole::Manager->value, TeamRole::Employee->value]);
         })->pluck('id');
     }
 

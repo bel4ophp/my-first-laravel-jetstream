@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\TeamRole;
 use App\Models\TimeEntry;
 use App\Models\User;
 use Illuminate\Auth\Access\HandlesAuthorization;
@@ -58,6 +59,6 @@ class TimeEntryPolicy
     public function export(User $user): bool
     {
         return $user->ownsTeam($user->currentTeam)
-            || $user->hasTeamRole($user->currentTeam, 'manager');
+            || $user->hasTeamRole($user->currentTeam, TeamRole::Manager->value);
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\TeamRole;
 use App\Models\User;
 
 class LeaveApproverResolver
@@ -12,10 +13,17 @@ class LeaveApproverResolver
      */
     public function resolve(User $submitter): ?User
     {
-        if ($submitter->hasTeamRole($submitter->currentTeam, 'manager')) {
-            return User::where('is_admin', true)->first();
+        $team = $submitter->currentTeam;
+
+        // Without a team there is no approval chain to walk.
+        if (! $team) {
+            return null;
         }
 
-        return User::getTeamManager($submitter->currentTeam->id);
+        if ($submitter->hasTeamRole($team, TeamRole::Manager->value)) {
+            return User::where('is_admin', true)->orderBy('id')->first();
+        }
+
+        return User::getTeamManager($team->id);
     }
 }
