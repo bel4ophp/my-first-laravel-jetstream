@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Exceptions\InvalidClockTimes;
 use App\Models\Team;
 use App\Models\TimeEntry;
 use App\Models\User;
@@ -51,7 +52,7 @@ class AttendanceCalendarService
                 ->values();
         }
 
-        if ($user->currentTeam && Gate::check('viewAny', TimeEntry::class)) {
+        if ($user->currentTeam && Gate::forUser($user)->check('viewAny', TimeEntry::class)) {
             return $user->currentTeam->memberIds();
         }
 
@@ -60,25 +61,24 @@ class AttendanceCalendarService
 
     /**
      * Returns the users available for selection when creating/assigning a time entry.
+     *
+     * Drawn from visibleUserIds() so a user can only create entries for people
+     * whose entries they can already see — a team owner is limited to their own
+     * teams rather than every user in the system.
+     *
+     * @return Collection<int, User>
      */
     public function selectableUsers(User $user): Collection
     {
-        if ($user->is_admin || $user->ownsTeam($user->currentTeam)) {
-            return User::where('is_admin', false)->orderBy('name')->get();
-        }
-
-        if ($user->currentTeam) {
-            return $user->currentTeam->allUsers()
-                ->reject(fn (User $member) => $member->is_admin)
-                ->sortBy('name')
-                ->values();
-        }
-
-        return collect();
+        return User::query()
+            ->whereIn('id', $this->visibleUserIds($user))
+            ->where('is_admin', false)
+            ->orderBy('name')
+            ->get();
     }
 
     /**
-     * @throws \InvalidArgumentException when clock_out precedes clock_in
+     * @throws InvalidClockTimes when clock_out precedes clock_in
      */
     public function createTimeEntry(
         int $userId,
@@ -86,45 +86,45 @@ class AttendanceCalendarService
         string $clockIn,
         ?string $clockOut,
     ): TimeEntry {
-        $parsedClockIn  = $this->parseClock($workDay, $clockIn);
+        $parsedClockIn = $this->parseClock($workDay, $clockIn);
         $parsedClockOut = null;
 
         if ($clockOut) {
             $parsedClockOut = $this->parseClock($workDay, $clockOut);
 
             if ($parsedClockOut->lt($parsedClockIn)) {
-                throw new \InvalidArgumentException('Clock out must be after clock in.');
+                throw new InvalidClockTimes;
             }
         }
 
         return TimeEntry::create([
-            'user_id'        => $userId,
-            'work_day'       => $workDay,
-            'clock_in'       => $parsedClockIn,
-            'clock_out'      => $parsedClockOut,
+            'user_id' => $userId,
+            'work_day' => $workDay,
+            'clock_in' => $parsedClockIn,
+            'clock_out' => $parsedClockOut,
             'worked_minutes' => $parsedClockOut ? $parsedClockIn->diffInMinutes($parsedClockOut) : null,
         ]);
     }
 
     /**
-     * @throws \InvalidArgumentException when clock_out precedes clock_in
+     * @throws InvalidClockTimes when clock_out precedes clock_in
      */
     public function updateTimeEntry(TimeEntry $entry, string $clockIn, ?string $clockOut): void
     {
         $date = $entry->work_day->toDateString();
-        $parsedClockIn  = $this->parseClock($date, $clockIn);
+        $parsedClockIn = $this->parseClock($date, $clockIn);
         $parsedClockOut = null;
 
         if ($clockOut) {
             $parsedClockOut = $this->parseClock($date, $clockOut);
 
             if ($parsedClockOut->lt($parsedClockIn)) {
-                throw new \InvalidArgumentException('Clock out must be after clock in.');
+                throw new InvalidClockTimes;
             }
         }
 
-        $entry->clock_in       = $parsedClockIn;
-        $entry->clock_out      = $parsedClockOut;
+        $entry->clock_in = $parsedClockIn;
+        $entry->clock_out = $parsedClockOut;
         $entry->worked_minutes = $parsedClockOut ? $parsedClockIn->diffInMinutes($parsedClockOut) : null;
         $entry->save();
     }

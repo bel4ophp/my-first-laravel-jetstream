@@ -5,14 +5,12 @@ namespace App\Actions\Jetstream;
 use App\Enums\TeamRole;
 use App\Models\Team;
 use App\Models\User;
+use App\Rules\BelongsToNoOtherTeam;
 use Closure;
 use Illuminate\Database\Query\Builder;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -20,11 +18,11 @@ use Laravel\Jetstream\Contracts\InvitesTeamMembers;
 use Laravel\Jetstream\Events\InvitingTeamMember;
 use Laravel\Jetstream\Jetstream;
 use Laravel\Jetstream\Mail\TeamInvitation;
-use Laravel\Jetstream\Rules\Role;
-use App\Rules\BelongsToNoOtherTeam;
 
 class InviteTeamMember implements InvitesTeamMembers
 {
+    public function __construct(private ProvisionTeamMember $provisioner) {}
+
     /**
      * Invite a new team member to the given team.
      */
@@ -72,23 +70,7 @@ class InviteTeamMember implements InvitesTeamMembers
     {
         Log::info("No account for {$email}; provisioning one for team {$team->id}.");
 
-        $newTeamMember = DB::transaction(function () use ($team, $email, $role) {
-            $member = User::create([
-                'name' => $this->nameFromEmail($email),
-                'email' => $email,
-                'password' => Hash::make(Str::random(32)),
-            ]);
-
-            $team->users()->attach($member, ['role' => $role]);
-            $member->switchTeam($team);
-
-            return $member;
-        });
-
-        // Outside the transaction: a mail failure must not roll back the member.
-        $newTeamMember->sendPasswordResetNotification(
-            Password::createToken($newTeamMember)
-        );
+        $this->provisioner->provision($team, $this->nameFromEmail($email), $email, $role);
     }
 
     /**
@@ -113,7 +95,7 @@ class InviteTeamMember implements InvitesTeamMembers
         Validator::make([
             'email' => $email,
             'role' => $role,
-        ], $this->rules($team), [
+        ], $this->rules($user, $team), [
             'email.unique' => __('This user has already been invited to the team.'),
         ])
             ->after($this->ensureUserIsNotAlreadyOnTeam($team, $email))
@@ -126,7 +108,7 @@ class InviteTeamMember implements InvitesTeamMembers
      *
      * @return array<string, \Illuminate\Contracts\Validation\Rule|array|string>
      */
-    protected function rules(Team $team): array
+    protected function rules(User $user, Team $team): array
     {
         return array_filter([
             'email' => [
@@ -137,7 +119,7 @@ class InviteTeamMember implements InvitesTeamMembers
                 }),
                 new BelongsToNoOtherTeam($team),
             ],
-            'role' => Jetstream::hasRoles() ? ['required', 'string', new Role] : null,
+            'role' => Jetstream::hasRoles() ? ['required', 'string', Rule::in(TeamRole::assignableBy($user, $team))] : null,
         ]);
     }
 

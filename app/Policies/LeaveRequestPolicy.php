@@ -11,23 +11,6 @@ class LeaveRequestPolicy
     public function __construct(private LeaveApproverResolver $approverResolver) {}
 
     /**
-     * Any authenticated team member can view their own leave requests list.
-     */
-    public function viewAny(User $user): bool
-    {
-        return true;
-    }
-
-    /**
-     * Own requests are always visible; managers/admins can view team requests.
-     */
-    public function view(User $user, LeaveRequest $leaveRequest): bool
-    {
-        return $user->id === $leaveRequest->user_id
-            || $user->hasTeamPermission($user->currentTeam, 'approve-leave-requests');
-    }
-
-    /**
      * Employees and managers can submit their own leave requests.
      */
     public function create(User $user): bool

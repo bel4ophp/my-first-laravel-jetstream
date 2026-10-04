@@ -15,7 +15,7 @@ class CreateTeamTest extends TestCase
 
     public function test_teams_can_be_created(): void
     {
-        $this->actingAs($user = User::factory()->withPersonalTeam()->create());
+        $this->actingAs($user = User::factory()->withPersonalTeam()->create(['is_admin' => true]));
 
         Livewire::test(CreateTeamForm::class)
             ->set(['state' => ['name' => 'Test Team']])
@@ -33,7 +33,7 @@ class CreateTeamTest extends TestCase
      */
     public function test_the_creator_owns_the_team_without_joining_it_as_a_member(): void
     {
-        $this->actingAs($user = User::factory()->withPersonalTeam()->create());
+        $this->actingAs($user = User::factory()->withPersonalTeam()->create(['is_admin' => true]));
 
         Livewire::test(CreateTeamForm::class)
             ->set(['state' => ['name' => 'Test Team']])
@@ -50,7 +50,7 @@ class CreateTeamTest extends TestCase
 
     public function test_a_new_team_starts_with_no_manager(): void
     {
-        $this->actingAs($user = User::factory()->withPersonalTeam()->create());
+        $this->actingAs($user = User::factory()->withPersonalTeam()->create(['is_admin' => true]));
 
         Livewire::test(CreateTeamForm::class)
             ->set(['state' => ['name' => 'Test Team']])
@@ -71,7 +71,7 @@ class CreateTeamTest extends TestCase
      */
     public function test_a_creator_who_manages_another_team_does_not_join_the_new_one(): void
     {
-        $creator = User::factory()->withPersonalTeam()->create();
+        $creator = User::factory()->withPersonalTeam()->create(['is_admin' => true]);
 
         // Legacy-shaped data: owns their current team, but also holds a manager
         // role on someone else's. That combination is what reached the branch —

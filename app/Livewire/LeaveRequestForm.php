@@ -3,6 +3,9 @@
 namespace App\Livewire;
 
 use App\Enums\LeaveType;
+use App\Exceptions\InsufficientLeaveDays;
+use App\Exceptions\NoWorkingDaysInRange;
+use App\Exceptions\OverlappingLeaveRequest;
 use App\Models\LeaveRequest;
 use App\Services\LeaveBalanceService;
 use App\Services\LeaveDayCalculator;
@@ -17,12 +20,17 @@ use Livewire\Component;
 class LeaveRequestForm extends Component
 {
     public string $type = '';
+
     public string $startDate = '';
+
     public string $endDate = '';
+
     public string $notes = '';
 
     protected LeaveDayCalculator $calculator;
+
     protected LeaveBalanceService $balances;
+
     protected LeaveRequestService $leaveRequests;
 
     public function boot(
@@ -60,7 +68,10 @@ class LeaveRequestForm extends Component
     #[Computed]
     public function previewDays(): ?int
     {
-        if ($this->startDate === '' || $this->endDate === '') {
+        $team = Auth::user()->currentTeam;
+
+        // Holidays are per team, so there is no working-day count without one.
+        if (! $team || $this->startDate === '' || $this->endDate === '') {
             return null;
         }
 
@@ -75,11 +86,19 @@ class LeaveRequestForm extends Component
             return null;
         }
 
-        return $this->calculator->workingDays(Auth::user()->currentTeam, $start, $end);
+        return $this->calculator->workingDays($team, $start, $end);
     }
 
     public function submit(): void
     {
+        // Checked before authorizing: without a team the policy would answer
+        // with a bare 403, and the person deserves to know why.
+        if (! Auth::user()->currentTeam) {
+            $this->addError('type', __('You need to belong to a team before you can request leave.'));
+
+            return;
+        }
+
         $this->authorize('create', LeaveRequest::class);
 
         $validated = $this->validate([
@@ -89,17 +108,27 @@ class LeaveRequestForm extends Component
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $this->leaveRequests->submit(
-            Auth::user(),
-            LeaveType::from($validated['type']),
-            Carbon::parse($validated['startDate']),
-            Carbon::parse($validated['endDate']),
-            $validated['notes'] ?: null,
-        );
+        try {
+            $this->leaveRequests->submit(
+                Auth::user(),
+                LeaveType::from($validated['type']),
+                Carbon::parse($validated['startDate']),
+                Carbon::parse($validated['endDate']),
+                $validated['notes'] ?: null,
+            );
+        } catch (NoWorkingDaysInRange|OverlappingLeaveRequest $e) {
+            $this->addError('startDate', $e->getMessage());
+
+            return;
+        } catch (InsufficientLeaveDays $e) {
+            $this->addError('type', $e->getMessage());
+
+            return;
+        }
 
         $this->reset(['type', 'startDate', 'endDate', 'notes']);
 
-        session()->flash('leave-success', 'Your leave request has been submitted.');
+        session()->flash('leave-success', __('Your leave request has been submitted.'));
         $this->dispatch('leave-request-submitted');
     }
 

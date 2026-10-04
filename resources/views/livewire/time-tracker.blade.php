@@ -1,10 +1,13 @@
-<div class="relative w-full" x-data="timerComponent()">
-    {{-- Clock In: only show when no entry for today --}}
-    @if (!($clockInTime && $clockOutTime))
-        <template x-if="!running">
-            <button class="h-full absolute inset-0 z-10 text-primary btn btn-soft btn-primary backdrop-blur-md bg-opacity-10 text-lg hover:text-base-300" @click="start()">Clock In</button>
-        </template>
-    @endif
+<div class="relative w-full"
+     x-data="timerComponent(@js([
+         'maxShiftSeconds' => \App\Services\TimeTrackingService::maxShiftHours() * 3600,
+         'serverNowMs' => now()->getTimestampMs(),
+     ]))">
+    {{-- Clock In: only before today's shift has started — the server enforces the same rule --}}
+    <template x-if="! $wire.clockInTime">
+        <button class="h-full absolute inset-0 z-10 text-primary btn btn-soft btn-primary backdrop-blur-md bg-opacity-10 text-lg hover:text-base-300"
+                @click="clockIn()" :disabled="busy">Clock In</button>
+    </template>
     <div class="grid h-full w-full place-items-center">
         {{-- Timer Display --}}
         <div class="flex items-end gap-3 tabular-nums">
@@ -52,81 +55,125 @@
 
     @script
         <script>
-            Alpine.data('timerComponent', () => ({
-
-                totalSeconds: 0,
+            /**
+             * Counts down the rest of today's shift and clocks out when it ends.
+             *
+             * The remaining time is recomputed from the clock-in time on every
+             * tick rather than decremented: browsers throttle timers in
+             * background tabs, so a decrementing counter falls behind. It is
+             * measured against the server's clock, since the user's may be off.
+             * The server caps the shift at the same length, so this clock-out is
+             * a convenience, not the rule.
+             */
+            Alpine.data('timerComponent', ({ maxShiftSeconds, serverNowMs }) => ({
+                remainingSeconds: 0,
                 intervalId: null,
-                running: @entangle('isRunning'),
+                busy: false,
+                clockOutRequested: false,
+                clockSkewMs: serverNowMs - Date.now(),
 
                 init() {
-                    if (!$wire.clockInTime) return;
+                    this.sync();
+                },
 
-                    if ($wire.clockOutTime) {
+                destroy() {
+                    this.stopTicking();
+                },
+
+                /**
+                 * Re-read the shift from the component and start or stop ticking.
+                 */
+                sync() {
+                    this.stopTicking();
+                    this.remainingSeconds = this.secondsLeft();
+
+                    if (! $wire.isRunning) {
                         return;
-                    };
+                    }
 
-                    const clockedInAt = new Date($wire.clockInTime);
-                    const elapsedSinceClockIn = Math.floor((Date.now() - clockedInAt.getTime()) / 1000);
-                    const totalWorked = ($wire.workedMinutes ?? 0) * 60 + elapsedSinceClockIn;
-
-                    // countdown from 8h minus already worked time
-                    this.totalSeconds = Math.max(0, (8 * 60 * 60) - totalWorked);
-
-                    if (this.totalSeconds > 0) {
+                    if (this.remainingSeconds > 0) {
                         this.intervalId = setInterval(() => this.tick(), 1000);
                     } else {
-                        // Timer has expired, automatically clock out
-                        console.log('Timer expired, clocking out...');
-                        this.stop();
+                        this.clockOut();
                     }
+                },
+
+                secondsLeft() {
+                    if (! $wire.isRunning || ! $wire.clockInTime) {
+                        return 0;
+                    }
+
+                    const now = Date.now() + this.clockSkewMs;
+                    const elapsedSeconds = Math.floor((now - new Date($wire.clockInTime).getTime()) / 1000);
+
+                    return Math.max(0, maxShiftSeconds - elapsedSeconds);
                 },
 
                 tick() {
-                    if (this.totalSeconds <= 0) {
-                        this.stop();
+                    this.remainingSeconds = this.secondsLeft();
+
+                    if (this.remainingSeconds === 0) {
+                        this.clockOut();
+                    }
+                },
+
+                stopTicking() {
+                    clearInterval(this.intervalId);
+                    this.intervalId = null;
+                },
+
+                async clockIn() {
+                    if (this.busy) {
                         return;
                     }
 
-                    this.totalSeconds--;
+                    this.busy = true;
+
+                    try {
+                        await $wire.clockIn();
+                    } catch {
+                        // Livewire reports failed requests itself.
+                    } finally {
+                        this.busy = false;
+                        this.sync();
+                    }
                 },
 
-                start() {
-                    if (this.running) return;
+                /**
+                 * Attempted once per page: if it fails, the scheduled command
+                 * closes the shift, so retrying in a loop would only add load.
+                 */
+                async clockOut() {
+                    this.stopTicking();
 
-                    $wire.call('clockIn')
-                        .then(() => {
-                            // Set timer to 8 hours and start counting down
-                            this.totalSeconds = 8 * 60 * 60;
-                            this.intervalId = setInterval(() => this.tick(), 1000);
-                        })
-                        .catch((e) => {
-                            // handle error
-                            console.log(e, 'Error occurred while starting timer');
-                        });
-                },
+                    if (this.busy || this.clockOutRequested) {
+                        return;
+                    }
 
-                stop() {
-                    clearInterval(this.intervalId);
-                    this.totalSeconds = 0;
+                    this.busy = true;
+                    this.clockOutRequested = true;
 
-                    $wire.call('clockOut');
-                },
-
-                reset() {
-                    this.stop();
-                    this.totalSeconds = 0;
+                    try {
+                        await $wire.clockOut();
+                    } catch {
+                        // Livewire reports failed requests itself; the scheduled
+                        // command closes the shift if this never gets through.
+                    } finally {
+                        this.busy = false;
+                        this.sync();
+                    }
                 },
 
                 get hours() {
-                    return Math.floor(this.totalSeconds / 3600);
+                    return Math.floor(this.remainingSeconds / 3600);
                 },
 
                 get minutes() {
-                    return Math.floor((this.totalSeconds % 3600) / 60);
+                    return Math.floor((this.remainingSeconds % 3600) / 60);
                 },
 
                 get seconds() {
-                    return this.totalSeconds % 60;
+                    return this.remainingSeconds % 60;
                 },
             }));
         </script>

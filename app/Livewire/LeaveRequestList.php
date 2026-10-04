@@ -2,10 +2,9 @@
 
 namespace App\Livewire;
 
-use App\Enums\LeaveStatus;
+use App\Exceptions\BusinessRuleException;
 use App\Models\LeaveRequest;
-use App\Notifications\LeaveRequestCancelled;
-use App\Services\LeaveApproverResolver;
+use App\Services\LeaveRequestService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -35,20 +34,21 @@ class LeaveRequestList extends Component
         unset($this->requests);
     }
 
-    public function cancel(LeaveRequest $leaveRequest, LeaveApproverResolver $approverResolver): void
+    public function cancel(LeaveRequest $leaveRequest, LeaveRequestService $leaveRequests): void
     {
         $this->authorize('cancel', $leaveRequest);
 
-        $leaveRequest->update([
-            'status' => LeaveStatus::Cancelled,
-            'cancelled_at' => now(),
-        ]);
+        try {
+            $leaveRequests->cancel($leaveRequest);
+        } catch (BusinessRuleException $e) {
+            unset($this->requests);
+            session()->flash('leave-error', $e->getMessage());
 
-        $approverResolver->resolve($leaveRequest->user)
-            ?->notify(new LeaveRequestCancelled($leaveRequest));
+            return;
+        }
 
         unset($this->requests);
-        session()->flash('leave-success', 'Your leave request has been cancelled.');
+        session()->flash('leave-success', __('Your leave request has been cancelled.'));
     }
 
     public function render(): View

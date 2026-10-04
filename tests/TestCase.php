@@ -17,6 +17,34 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
+     * Runs once the application exists but before any trait — RefreshDatabase
+     * included — touches the database. A check in setUp() would come too late:
+     * the wipe happens inside parent::setUp().
+     *
+     * @return array<class-string, class-string>
+     */
+    protected function setUpTraits()
+    {
+        $this->ensureTestingDatabase();
+
+        return parent::setUpTraits();
+    }
+
+    /**
+     * RefreshDatabase wipes whatever database the suite points at. If the
+     * phpunit.xml override is ever lost — a cached config, an env var set in
+     * the container — the suite must stop rather than wipe the real data.
+     */
+    protected function ensureTestingDatabase(): void
+    {
+        $database = (string) config('database.connections.'.config('database.default').'.database');
+
+        if (! str_ends_with($database, '_testing')) {
+            $this->fail("Refusing to run against \"{$database}\": the test database name must end in \"_testing\".");
+        }
+    }
+
+    /**
      * Seed the application's roles/permissions and register them with Jetstream.
      *
      * JetstreamServiceProvider boots before the test database has been migrated,

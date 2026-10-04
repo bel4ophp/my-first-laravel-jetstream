@@ -4,7 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Laravel\Jetstream\Http\Livewire\TeamMemberManager;
+use App\Livewire\Teams\TeamMemberManager;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -14,7 +14,7 @@ class RemoveTeamMemberTest extends TestCase
 
     public function test_team_members_can_be_removed_from_teams(): void
     {
-        $this->actingAs($user = User::factory()->withPersonalTeam()->create());
+        $this->actingAs($user = User::factory()->withPersonalTeam()->create(['is_admin' => true]));
 
         $user->currentTeam->users()->attach(
             $otherUser = User::factory()->create(), ['role' => 'admin']

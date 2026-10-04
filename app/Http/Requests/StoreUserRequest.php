@@ -5,9 +5,11 @@ namespace App\Http\Requests;
 use App\Enums\TeamRole;
 use App\Models\Team;
 use App\Models\User;
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Http\FormRequest;
-use Laravel\Jetstream\Rules\Role;
+use Illuminate\Validation\Rule;
 
 class StoreUserRequest extends FormRequest
 {
@@ -22,15 +24,16 @@ class StoreUserRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array|string>
+     * @return array<string, ValidationRule|array|string>
      */
     public function rules(): array
     {
         return [
             'name' => 'required|string|max:255',
             'email' => 'required|email|max:255|unique:users,email',
-            'team_id' => 'required|exists:teams,id',
-            'role' => ['required', 'string', new Role],
+            // Personal teams are Jetstream scaffolding, not places to put staff.
+            'team_id' => ['required', Rule::exists('teams', 'id')->where(fn (Builder $query) => $query->where('personal_team', false))],
+            'role' => ['required', 'string', Rule::in(TeamRole::assignableBy($this->user()))],
         ];
     }
 
@@ -63,20 +66,21 @@ class StoreUserRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.required' => 'The user name is required.',
-            'name.string' => 'The user name must be a string.',
-            'name.max' => 'The user name may not be greater than 255 characters.',
-            
-            'email.required' => 'The email address is required.',
-            'email.email' => 'The email address must be a valid email format.',
-            'email.max' => 'The email address may not be greater than 255 characters.',
-            'email.unique' => 'This email address is already in use.',
-            
-            'team_id.required' => 'A team must be selected.',
-            'team_id.exists' => 'The selected team does not exist.',
-            
-            'role.required' => 'A role must be assigned.',
-            'role.string' => 'The role must be a string.',
+            'name.required' => __('The user name is required.'),
+            'name.string' => __('The user name must be a string.'),
+            'name.max' => __('The user name may not be greater than 255 characters.'),
+
+            'email.required' => __('The email address is required.'),
+            'email.email' => __('The email address must be a valid email format.'),
+            'email.max' => __('The email address may not be greater than 255 characters.'),
+            'email.unique' => __('This email address is already in use.'),
+
+            'team_id.required' => __('A team must be selected.'),
+            'team_id.exists' => __('The selected team does not exist.'),
+
+            'role.required' => __('A role must be assigned.'),
+            'role.string' => __('The role must be a string.'),
+            'role.in' => __('The selected role cannot be assigned.'),
         ];
     }
 
@@ -88,10 +92,10 @@ class StoreUserRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'name' => 'user name',
-            'email' => 'email address',
-            'team_id' => 'team',
-            'role' => 'user role',
+            'name' => __('user name'),
+            'email' => __('email address'),
+            'team_id' => __('team'),
+            'role' => __('user role'),
         ];
     }
 }

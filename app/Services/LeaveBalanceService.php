@@ -29,6 +29,30 @@ class LeaveBalanceService
     }
 
     /**
+     * The user's balance row for the year, locked until the surrounding
+     * transaction ends, so a check-then-deduct can't interleave with another.
+     * Must be called inside DB::transaction().
+     */
+    public function lockBalance(User $user, ?int $year = null): LeaveBalance
+    {
+        $balance = $this->currentBalance($user, $year);
+
+        return LeaveBalance::whereKey($balance->getKey())->lockForUpdate()->firstOrFail();
+    }
+
+    /**
+     * Set how many pool days the user has in the year; days already used are
+     * left as they are. Callers authorize first (UserPolicy::manageLeaveBalance).
+     */
+    public function setTotalDays(User $user, int $totalDays, ?int $year = null): LeaveBalance
+    {
+        $balance = $this->currentBalance($user, $year);
+        $balance->update(['total_days' => $totalDays]);
+
+        return $balance;
+    }
+
+    /**
      * Remaining pool days for the user in the given year.
      */
     public function remainingDays(User $user, ?int $year = null): int
@@ -72,7 +96,7 @@ class LeaveBalanceService
      * balance for anyone who doesn't have one yet.
      *
      * @param  Collection<int, int>  $userIds
-     * @return int  the number of users whose pool was reset
+     * @return int the number of users whose pool was reset
      */
     public function resetUsedDays(Collection $userIds, ?int $year = null): int
     {

@@ -16,7 +16,7 @@ class LeaveResetService
      * Admin   -> every manager + employee across all teams.
      * Manager -> the manager themselves + their own team's employees.
      *
-     * @return Collection<int, int>  user IDs
+     * @return Collection<int, int> user IDs
      */
     public function scopedUserIds(User $actor): Collection
     {
@@ -51,7 +51,7 @@ class LeaveResetService
     /**
      * Reset the pool for everyone in the actor's scope.
      *
-     * @return int  the number of users reset
+     * @return int the number of users reset
      */
     public function reset(User $actor): int
     {

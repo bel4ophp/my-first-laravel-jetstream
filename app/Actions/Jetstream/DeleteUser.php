@@ -13,9 +13,7 @@ class DeleteUser implements DeletesUsers
     /**
      * Create a new action instance.
      */
-    public function __construct(protected DeletesTeams $deletesTeams)
-    {
-    }
+    public function __construct(protected DeletesTeams $deletesTeams) {}
 
     /**
      * Delete the given user.
@@ -26,6 +24,8 @@ class DeleteUser implements DeletesUsers
             $this->deleteTeams($user);
             $user->deleteProfilePhoto();
             $user->tokens->each->delete();
+            // Polymorphic, so no foreign key removes them with the user.
+            $user->notifications()->delete();
             $user->delete();
         });
     }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -18,7 +19,7 @@ class UpdateUserRequest extends FormRequest
     /**
      * Get the validation rules that apply to the request.
      *
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array|string>
+     * @return array<string, ValidationRule|array|string>
      */
     public function rules(): array
     {
@@ -41,13 +42,13 @@ class UpdateUserRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'name.required' => 'The user name is required.',
-            'name.max' => 'The user name may not be greater than 255 characters.',
+            'name.required' => __('The user name is required.'),
+            'name.max' => __('The user name may not be greater than 255 characters.'),
 
-            'email.required' => 'The email address is required.',
-            'email.email' => 'The email address must be a valid email format.',
-            'email.max' => 'The email address may not be greater than 255 characters.',
-            'email.unique' => 'This email address is already in use.',
+            'email.required' => __('The email address is required.'),
+            'email.email' => __('The email address must be a valid email format.'),
+            'email.max' => __('The email address may not be greater than 255 characters.'),
+            'email.unique' => __('This email address is already in use.'),
         ];
     }
 
@@ -59,8 +60,8 @@ class UpdateUserRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'name' => 'user name',
-            'email' => 'email address',
+            'name' => __('user name'),
+            'email' => __('email address'),
         ];
     }
 }

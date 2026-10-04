@@ -5,15 +5,20 @@ namespace App\Policies;
 use App\Enums\TeamRole;
 use App\Models\TimeEntry;
 use App\Models\User;
+use App\Services\AttendanceCalendarService;
 use Illuminate\Auth\Access\HandlesAuthorization;
 
 class TimeEntryPolicy
 {
     use HandlesAuthorization;
 
+    public function __construct(private AttendanceCalendarService $calendarService) {}
+
     /**
-     * Admin + manager can view the attendance calendar for all team members.
-     * Employees are scoped to their own entries via ownership checks elsewhere.
+     * Every role holds view-attendance, so everyone on a team can open the
+     * attendance calendar and see their whole team's clock-ins — employees use
+     * it to see who is in today. AttendanceCalendarService::scopedUserIds()
+     * keeps that to their own team; changing entries needs manage().
      */
     public function viewAny(User $user): bool
     {
@@ -21,7 +26,8 @@ class TimeEntryPolicy
     }
 
     /**
-     * Own entries are always visible; admin + manager can view any team entry.
+     * Own entries are always visible; anyone with view-attendance can see their
+     * team's entries (which entries reach them is AttendanceCalendarService's call).
      */
     public function view(User $user, TimeEntry $timeEntry): bool
     {
@@ -38,19 +44,29 @@ class TimeEntryPolicy
     }
 
     /**
-     * Admin + manager can edit any team member's time entry.
+     * Whether the user edits and deletes time entries at all, regardless of
+     * whose. The UI reads this to decide whether to render the controls; the
+     * actions themselves must still authorize update/delete per entry.
      */
-    public function update(User $user, TimeEntry $_timeEntry): bool
+    public function manage(User $user): bool
     {
         return $user->hasTeamPermission($user->currentTeam, 'update-time-entries');
     }
 
     /**
-     * Admin + manager can delete any team member's time entry.
+     * Admin + manager can edit a time entry belonging to someone they can see.
      */
-    public function delete(User $user, TimeEntry $_timeEntry): bool
+    public function update(User $user, TimeEntry $timeEntry): bool
     {
-        return $user->hasTeamPermission($user->currentTeam, 'update-time-entries');
+        return $this->manage($user) && $this->isInScope($user, $timeEntry);
+    }
+
+    /**
+     * Admin + manager can delete a time entry belonging to someone they can see.
+     */
+    public function delete(User $user, TimeEntry $timeEntry): bool
+    {
+        return $this->manage($user) && $this->isInScope($user, $timeEntry);
     }
 
     /**
@@ -60,5 +76,18 @@ class TimeEntryPolicy
     {
         return $user->ownsTeam($user->currentTeam)
             || $user->hasTeamRole($user->currentTeam, TeamRole::Manager->value);
+    }
+
+    /**
+     * Whether the entry belongs to someone whose attendance the user may see.
+     *
+     * Holding the permission is not enough on its own: without this, a manager
+     * could edit or delete any team's entry by passing its ID to a Livewire
+     * action. Scope comes from the same service the calendar lists from, so
+     * what a manager can touch is exactly what they are shown.
+     */
+    private function isInScope(User $user, TimeEntry $timeEntry): bool
+    {
+        return $this->calendarService->scopedUserIds($user, null)->contains($timeEntry->user_id);
     }
 }

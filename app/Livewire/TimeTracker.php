@@ -2,8 +2,7 @@
 
 namespace App\Livewire;
 
-use App\Events\UserClockedInEvent;
-use App\Models\TimeEntry;
+use App\Services\TimeTrackingService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -19,27 +18,29 @@ class TimeTracker extends Component
 
     public bool $isRunning = false;
 
+    protected TimeTrackingService $timeTracking;
+
+    public function boot(TimeTrackingService $timeTracking): void
+    {
+        $this->timeTracking = $timeTracking;
+    }
+
     public function mount(): void
     {
         $this->loadEntry();
     }
 
     /**
-     * Today's entry for the signed-in user, or null before they clock in.
+     * Sync the display state from today's entry.
      *
-     * Deliberately not a public property: Livewire would serialize the whole
-     * model into the component payload on every request.
+     * The entry itself is deliberately not a public property: Livewire would
+     * serialize the whole model into the component payload on every request.
+     * The properties set here are for display only — the browser can edit
+     * them, so the service never trusts them.
      */
-    private function todaysEntry(): ?TimeEntry
-    {
-        return TimeEntry::where('user_id', Auth::id())
-            ->onDay(today())
-            ->first();
-    }
-
     public function loadEntry(): void
     {
-        $entry = $this->todaysEntry();
+        $entry = $this->timeTracking->todaysEntry(Auth::user());
 
         // Explicitly sync the values Alpine reads.
         $this->clockInTime = $entry?->clock_in;
@@ -52,39 +53,14 @@ class TimeTracker extends Component
 
     public function clockIn(): void
     {
-        if ($this->isRunning) {
-            return;
-        }
-
-        $entry = $this->todaysEntry();
-
-        if ($entry) {
-            $entry->update(['clock_in' => now()]);
-        } else {
-            $entry = TimeEntry::create([
-                'user_id' => Auth::id(),
-                'work_day' => today(),
-                'clock_in' => now(),
-            ]);
-        }
+        $this->timeTracking->clockIn(Auth::user());
 
         $this->loadEntry();
-
-        event(new UserClockedInEvent(Auth::user(), $entry));
     }
 
     public function clockOut(): void
     {
-        $entry = $this->todaysEntry();
-
-        if (! $this->isRunning || ! $entry) {
-            return;
-        }
-
-        $entry->update([
-            'clock_out' => now(),
-            'worked_minutes' => $entry->clock_in->diffInMinutes(now()),
-        ]);
+        $this->timeTracking->clockOut(Auth::user());
 
         $this->loadEntry();
     }

@@ -7,23 +7,13 @@ use App\Models\Team;
 use App\Models\TimeEntry;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Route;
 use Laravel\Jetstream\Jetstream;
 use Tests\TestCase;
 
 class AttendanceExportTest extends TestCase
 {
     use RefreshDatabase;
-
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        // JetstreamServiceProvider skips role registration when runningInConsole(),
-        // so we mirror RolePermissionSeeder's permission assignments here.
-        Jetstream::role('admin',    'Administrator', ['*']);
-        Jetstream::role('manager',  'Manager',       ['read', 'update', 'view-attendance', 'create-time-entries', 'update-time-entries', 'add-team-member', 'update-team-member', 'remove-team-member']);
-        Jetstream::role('employee', 'Employee',      ['read']);
-    }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -63,7 +53,7 @@ class AttendanceExportTest extends TestCase
 
     public function test_team_member_cannot_export(): void
     {
-        $owner  = $this->makeOwner();
+        $owner = $this->makeOwner();
         $member = $this->makeMember($owner->currentTeam);
 
         $this->actingAs($member)
@@ -83,7 +73,7 @@ class AttendanceExportTest extends TestCase
 
     public function test_manager_can_export(): void
     {
-        $owner   = $this->makeOwner();
+        $owner = $this->makeOwner();
         $manager = $this->makeManager($owner->currentTeam);
 
         $this->actingAs($manager)
@@ -97,7 +87,7 @@ class AttendanceExportTest extends TestCase
     public function test_daily_export_returns_csv_for_the_given_date(): void
     {
         $owner = $this->makeOwner();
-        $date  = '2026-05-15';
+        $date = '2026-05-15';
         TimeEntry::factory()->forDay($date)->create(['user_id' => $owner->id]);
         TimeEntry::factory()->forDay('2026-05-16')->create(['user_id' => $owner->id]);
 
@@ -113,11 +103,11 @@ class AttendanceExportTest extends TestCase
 
     public function test_weekly_export_covers_monday_to_sunday(): void
     {
-        $owner     = $this->makeOwner();
+        $owner = $this->makeOwner();
         $wednesday = '2026-05-13'; // a Wednesday
-        $monday    = '2026-05-11';
-        $sunday    = '2026-05-17';
-        $nextWeek  = '2026-05-18';
+        $monday = '2026-05-11';
+        $sunday = '2026-05-17';
+        $nextWeek = '2026-05-18';
 
         TimeEntry::factory()->forDay($monday)->create(['user_id' => $owner->id]);
         TimeEntry::factory()->forDay($sunday)->create(['user_id' => $owner->id]);
@@ -208,6 +198,29 @@ class AttendanceExportTest extends TestCase
             ->assertSessionHasErrors('end_date');
     }
 
+    /**
+     * These routes once used plain `auth`, so Jetstream's "log out other
+     * browser sessions" didn't end sessions sitting on the attendance pages.
+     */
+    public function test_report_routes_use_the_jetstream_session_middleware(): void
+    {
+        foreach (['reports.attendance.index', 'reports.attendance.export'] as $name) {
+            $middleware = Route::getRoutes()->getByName($name)->gatherMiddleware();
+
+            $this->assertContains('auth:sanctum', $middleware, $name);
+            $this->assertContains(config('jetstream.auth_session'), $middleware, $name);
+        }
+    }
+
+    public function test_an_unknown_period_is_rejected(): void
+    {
+        $owner = $this->makeOwner();
+
+        $this->actingAs($owner)
+            ->get($this->exportUrl(['type' => 'hourly']))
+            ->assertSessionHasErrors('type');
+    }
+
     // ── CSV structure ─────────────────────────────────────────────────────────
 
     public function test_csv_contains_header_row_and_entry_data(): void
@@ -229,9 +242,9 @@ class AttendanceExportTest extends TestCase
 
     public function test_export_does_not_include_other_teams_entries(): void
     {
-        $owner       = $this->makeOwner();
-        $otherOwner  = User::factory()->withPersonalTeam()->create();
-        $date        = '2026-04-01';
+        $owner = $this->makeOwner();
+        $otherOwner = User::factory()->withPersonalTeam()->create();
+        $date = '2026-04-01';
 
         TimeEntry::factory()->forDay($date)->create(['user_id' => $owner->id]);
         TimeEntry::factory()->forDay($date)->create(['user_id' => $otherOwner->id]);

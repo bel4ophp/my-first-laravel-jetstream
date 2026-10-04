@@ -25,20 +25,22 @@ Route::middleware([
 
     // Unified leave page — the Request tab is available to all roles, the
     // Validation tab is gated per-policy inside the view.
-    Route::get('/leave', fn() => view('leave.index'))->name('leave.index');
+    Route::get('/leave', fn () => view('leave.index'))->name('leave.index');
 
     // Redirects preserve links from previously sent notification emails.
     Route::redirect('/leave-requests', '/leave');
     Route::redirect('/leave-approvals', '/leave?tab=validation');
 });
 
-Route::middleware(['auth', 'verified', 'can:viewAny,App\Models\TimeEntry'])
+// The same session stack as the rest of the app, so "log out other browser
+// sessions" also ends sessions sitting on these pages.
+Route::middleware(['auth:sanctum', config('jetstream.auth_session'), 'verified', 'can:viewAny,App\Models\TimeEntry'])
     ->prefix('reports')
     ->name('reports.attendance.')
     ->group(function () {
 
         // The calendar page — Livewire renders the component
-        Route::get('attendance', fn() => view('reports.attendance'))
+        Route::get('attendance', fn () => view('reports.attendance'))
             ->name('index');
 
         // CSV export — additionally gated to admin + manager only

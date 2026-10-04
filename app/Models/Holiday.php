@@ -19,9 +19,9 @@ class Holiday extends Model
     ];
 
     /**
-     * `date:Y-m-d` keeps writes as a plain date. A bare `date` cast writes
-     * "Y-m-d H:i:s", which MySQL silently truncates but SQLite stores verbatim
-     * — breaking `unique` lookups that compare against "Y-m-d".
+     * `date:Y-m-d` shapes serialization, not writes: a Carbon is sent as
+     * "Y-m-d H:i:s" and the DATE column drops the time. Writers pass "Y-m-d"
+     * strings so stored values match the `unique` lookups exactly.
      */
     protected function casts(): array
     {

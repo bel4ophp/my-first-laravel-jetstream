@@ -73,13 +73,17 @@
                                         </a>
                                     </td>
                                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                        <form method="POST" action="{{ route('users.destroy', $user->id) }}" style="display:inline;" onsubmit="return confirm('{{ __('Are you sure you want to delete this user?') }}');">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">
-                                                <x-lucide-trash class="w-5 h-5" />
-                                            </button>
-                                        </form>
+                                        @can('delete', $user)
+                                            <form method="POST" action="{{ route('users.destroy', $user->id) }}" class="inline"
+                                                  x-data
+                                                  @submit="if (! confirm(@js(__('Are you sure you want to delete this user?')))) $event.preventDefault()">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300">
+                                                    <x-lucide-trash class="w-5 h-5" />
+                                                </button>
+                                            </form>
+                                        @endcan
                                     </td>
                                 </tr>
                             @empty

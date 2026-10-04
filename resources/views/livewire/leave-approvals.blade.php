@@ -27,7 +27,7 @@
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-gray-800 text-sm text-gray-700 dark:text-gray-300">
                 @forelse ($this->pendingRequests as $request)
-                    <tr>
+                    <tr wire:key="pending-{{ $request->id }}">
                         <td class="px-4 py-3">{{ $request->user->name }}</td>
                         <td class="px-4 py-3">{{ $request->type->label() }}</td>
                         <td class="px-4 py-3">

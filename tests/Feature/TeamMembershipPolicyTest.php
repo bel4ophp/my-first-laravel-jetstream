@@ -23,9 +23,12 @@ class TeamMembershipPolicyTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Teams are owned by the global admin, the only one who may add managers.
+     */
     private function ownerWithTeam(): User
     {
-        return User::factory()->withPersonalTeam()->create();
+        return User::factory()->withPersonalTeam()->create(['is_admin' => true]);
     }
 
     private function memberOf(Team $team, TeamRole $role = TeamRole::Employee): User

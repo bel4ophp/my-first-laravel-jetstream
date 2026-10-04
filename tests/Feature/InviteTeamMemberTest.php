@@ -9,7 +9,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Laravel\Jetstream\Features;
-use Laravel\Jetstream\Http\Livewire\TeamMemberManager;
+use App\Livewire\Teams\TeamMemberManager;
 use Laravel\Jetstream\Mail\TeamInvitation;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -26,7 +26,7 @@ class InviteTeamMemberTest extends TestCase
 
         Mail::fake();
 
-        $this->actingAs($user = User::factory()->withPersonalTeam()->create());
+        $this->actingAs($user = User::factory()->withPersonalTeam()->create(['is_admin' => true]));
 
         // The app only sends an invitation when the email belongs to an
         // existing user; unknown emails are provisioned directly instead.
@@ -51,7 +51,7 @@ class InviteTeamMemberTest extends TestCase
 
         Mail::fake();
 
-        $this->actingAs($user = User::factory()->withPersonalTeam()->create());
+        $this->actingAs($user = User::factory()->withPersonalTeam()->create(['is_admin' => true]));
 
         $invited = User::factory()->create();
 
@@ -78,7 +78,7 @@ class InviteTeamMemberTest extends TestCase
 
         Notification::fake();
 
-        $this->actingAs($user = User::factory()->withPersonalTeam()->create());
+        $this->actingAs($user = User::factory()->withPersonalTeam()->create(['is_admin' => true]));
 
         Livewire::test(TeamMemberManager::class, ['team' => $user->currentTeam])
             ->set('addTeamMemberForm', [
@@ -103,7 +103,7 @@ class InviteTeamMemberTest extends TestCase
 
         Notification::fake();
 
-        $this->actingAs($user = User::factory()->withPersonalTeam()->create());
+        $this->actingAs($user = User::factory()->withPersonalTeam()->create(['is_admin' => true]));
 
         Livewire::test(TeamMemberManager::class, ['team' => $user->currentTeam])
             ->set('addTeamMemberForm', [
@@ -126,7 +126,7 @@ class InviteTeamMemberTest extends TestCase
             $this->markTestSkipped('Team invitations not enabled.');
         }
 
-        $this->actingAs($user = User::factory()->withPersonalTeam()->create());
+        $this->actingAs($user = User::factory()->withPersonalTeam()->create(['is_admin' => true]));
         $existing = User::factory()->create(['email' => 'existing@example.com']);
 
         Mail::shouldReceive('to')->once()->andThrow(new \RuntimeException('SMTP is down'));

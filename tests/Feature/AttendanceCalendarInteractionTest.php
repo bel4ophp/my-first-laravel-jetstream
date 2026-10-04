@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Enums\TeamRole;
 use App\Livewire\AttendanceCalendar;
+use App\Livewire\AttendanceDayPanel;
 use App\Models\Team;
 use App\Models\TimeEntry;
 use App\Models\User;
@@ -68,6 +69,46 @@ class AttendanceCalendarInteractionTest extends TestCase
     private function entryFor(User $user, string $workDay): TimeEntry
     {
         return TimeEntry::factory()->forDay($workDay)->create(['user_id' => $user->id]);
+    }
+
+    // ── Query-string period ───────────────────────────────────────────────────
+
+    private function calendarFromUrl(array $query)
+    {
+        return Livewire::withQueryParams($query)
+            ->actingAs($this->manager)
+            ->test(AttendanceCalendar::class);
+    }
+
+    /**
+     * ?month=13 used to roll silently into January of the following year.
+     */
+    public function test_an_out_of_range_month_in_the_url_falls_back_to_the_current_month(): void
+    {
+        $this->calendarFromUrl(['year' => 2025, 'month' => 13])
+            ->assertSet('year', 2025)
+            ->assertSet('month', 6);
+    }
+
+    public function test_a_year_before_the_first_selectable_one_falls_back_to_the_current_year(): void
+    {
+        $this->calendarFromUrl(['year' => 1999, 'month' => 3])
+            ->assertSet('year', 2026)
+            ->assertSet('month', 3);
+    }
+
+    public function test_a_future_year_in_the_url_falls_back_to_the_current_month(): void
+    {
+        $this->calendarFromUrl(['year' => 2030, 'month' => 2])
+            ->assertSet('year', 2026)
+            ->assertSet('month', 2);
+    }
+
+    public function test_an_invalid_month_set_from_the_page_is_corrected(): void
+    {
+        $this->calendar()
+            ->set('month', 0)
+            ->assertSet('month', 6);
     }
 
     // ── Navigation ────────────────────────────────────────────────────────────
@@ -222,6 +263,6 @@ class AttendanceCalendarInteractionTest extends TestCase
         $this->calendar()
             ->call('selectDay', 15)
             ->assertSet('selectedDateIso', '2026-06-15')
-            ->assertSeeLivewire(\App\Livewire\AttendanceDayPanel::class);
+            ->assertSeeLivewire(AttendanceDayPanel::class);
     }
 }

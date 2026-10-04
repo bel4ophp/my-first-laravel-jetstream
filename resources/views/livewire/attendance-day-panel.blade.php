@@ -128,7 +128,7 @@
             @forelse ($this->entries as $entry)
                 @php
                     $status    = $entry->status();
-                    $initials  = collect(explode(' ', $entry->user->name))->map(fn($p) => strtoupper($p[0]))->take(2)->implode('');
+                    $initials  = $entry->user->initials;
                     $timeRange = $entry->clockOutFormatted()
                         ? $entry->clockInFormatted() . ' – ' . $entry->clockOutFormatted()
                         : $entry->clockInFormatted() . ' – now';

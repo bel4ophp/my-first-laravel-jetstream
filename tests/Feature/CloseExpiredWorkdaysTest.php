@@ -9,9 +9,7 @@ use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
- * The command used raw DATE_ADD/TIMESTAMPDIFF, which only ran on MySQL and so
- * could never be exercised against the suite's SQLite database. These tests
- * exist because the rewrite made it testable.
+ * Shifts left open past the maximum length are capped at that length.
  */
 class CloseExpiredWorkdaysTest extends TestCase
 {

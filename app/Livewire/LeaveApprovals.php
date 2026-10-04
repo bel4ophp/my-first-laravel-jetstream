@@ -2,12 +2,12 @@
 
 namespace App\Livewire;
 
+use App\Exceptions\BusinessRuleException;
 use App\Models\LeaveRequest;
 use App\Services\LeaveRequestService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Validation\ValidationException;
 use Livewire\Attributes\Computed;
 use Livewire\Component;
 
@@ -37,24 +37,32 @@ class LeaveApprovals extends Component
 
         try {
             $this->leaveRequests->approve($leaveRequest, Auth::user());
-        } catch (ValidationException $e) {
+        } catch (BusinessRuleException $e) {
+            unset($this->pendingRequests);
             session()->flash('leave-error', $e->getMessage());
 
             return;
         }
 
         unset($this->pendingRequests);
-        session()->flash('leave-success', 'Leave request approved.');
+        session()->flash('leave-success', __('Leave request approved.'));
     }
 
     public function deny(LeaveRequest $leaveRequest): void
     {
         $this->authorize('deny', $leaveRequest);
 
-        $this->leaveRequests->deny($leaveRequest, Auth::user());
+        try {
+            $this->leaveRequests->deny($leaveRequest, Auth::user());
+        } catch (BusinessRuleException $e) {
+            unset($this->pendingRequests);
+            session()->flash('leave-error', $e->getMessage());
+
+            return;
+        }
 
         unset($this->pendingRequests);
-        session()->flash('leave-success', 'Leave request denied.');
+        session()->flash('leave-success', __('Leave request denied.'));
     }
 
     public function render(): View

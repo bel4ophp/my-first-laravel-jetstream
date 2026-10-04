@@ -9,12 +9,31 @@ use App\Models\TimeEntry;
 use App\Models\User;
 use App\Services\LeaveBalanceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Livewire\Livewire;
 use Tests\TestCase;
 
 class WorkStatsTest extends TestCase
 {
     use RefreshDatabase;
+
+    /**
+     * Pinned mid-month: several tests put an entry on "yesterday" and expect it
+     * in this month's total, which fails on the 1st when yesterday is last month.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        Carbon::setTestNow('2026-06-15 10:00:00');
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
+    }
 
     // ── Employee ──────────────────────────────────────────────────────────────
 
@@ -250,6 +269,43 @@ class WorkStatsTest extends TestCase
             ->assertSet('activeNow', '0 / 1');
     }
 
+    /**
+     * The figures used to be fixed at mount(), so the open dashboard never
+     * showed anyone clocking in after it loaded.
+     */
+    public function test_the_tile_picks_up_a_clock_in_on_its_next_refresh(): void
+    {
+        $owner = User::factory()->withPersonalTeam()->create();
+        $manager = User::factory()->create();
+        $owner->currentTeam->users()->attach($manager, ['role' => 'manager']);
+        $manager->switchTeam($owner->currentTeam);
+        $employee = User::factory()->create();
+        $owner->currentTeam->users()->attach($employee, ['role' => 'employee']);
+
+        $this->actingAs($manager);
+        $tile = Livewire::test(WorkStats::class)->assertSet('activeNow', '0 / 3');
+
+        TimeEntry::factory()->forDay(today()->format('Y-m-d'))->active()->create(['user_id' => $employee->id]);
+
+        $tile->call('$refresh')->assertSet('activeNow', '1 / 3');
+    }
+
+    public function test_someone_with_two_open_entries_counts_as_one_person_in(): void
+    {
+        $owner = User::factory()->withPersonalTeam()->create();
+        $manager = User::factory()->create();
+        $owner->currentTeam->users()->attach($manager, ['role' => 'manager']);
+        $manager->switchTeam($owner->currentTeam);
+        $employee = User::factory()->create();
+        $owner->currentTeam->users()->attach($employee, ['role' => 'employee']);
+
+        TimeEntry::factory()->count(2)->forDay(today()->format('Y-m-d'))->active()->create(['user_id' => $employee->id]);
+
+        $this->actingAs($manager);
+
+        Livewire::test(WorkStats::class)->assertSet('activeNow', '1 / 3');
+    }
+
     public function test_manager_sees_active_now_count(): void
     {
         $owner = User::factory()->withPersonalTeam()->create();
@@ -297,7 +353,7 @@ class WorkStatsTest extends TestCase
         $this->actingAs($user);
 
         Livewire::test(WorkStats::class)
-            ->assertSet('freeDays', LeaveBalanceService::DEFAULT_POOL_DAYS . '/0');
+            ->assertSet('freeDays', LeaveBalanceService::DEFAULT_POOL_DAYS.'/0');
 
         $this->assertDatabaseHas('leave_balances', [
             'user_id' => $user->id,

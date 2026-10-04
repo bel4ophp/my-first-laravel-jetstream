@@ -2,8 +2,10 @@
 
 namespace App\Livewire;
 
+use App\Exceptions\InvalidClockTimes;
 use App\Livewire\Concerns\AuthorizesAttendance;
 use App\Models\TimeEntry;
+use App\Models\User;
 use App\Services\AttendanceCalendarService;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
@@ -129,8 +131,8 @@ class AttendanceDayPanel extends Component
                 $this->entryEdits[$entryId]['clock_in'],
                 $this->entryEdits[$entryId]['clock_out'],
             );
-        } catch (\InvalidArgumentException) {
-            $this->addError("entryEdits.$entryId.clock_out", 'Clock out must be after clock in.');
+        } catch (InvalidClockTimes $e) {
+            $this->addError("entryEdits.$entryId.clock_out", $e->getMessage());
 
             return;
         }
@@ -180,8 +182,8 @@ class AttendanceDayPanel extends Component
                 $this->createForm['clock_in'],
                 $this->createForm['clock_out'],
             );
-        } catch (\InvalidArgumentException) {
-            $this->addError('createForm.clock_out', 'Clock out must be after clock in.');
+        } catch (InvalidClockTimes $e) {
+            $this->addError('createForm.clock_out', $e->getMessage());
 
             return;
         }
@@ -221,7 +223,7 @@ class AttendanceDayPanel extends Component
     }
 
     /**
-     * @return Collection<int, \App\Models\User>
+     * @return Collection<int, User>
      */
     #[Computed]
     public function selectableUsers(): Collection
@@ -234,35 +236,29 @@ class AttendanceDayPanel extends Component
     // ── Permissions ───────────────────────────────────────────────────────────
 
     #[Computed]
-    public function canViewTimeEntries(): bool
-    {
-        $user = $this->currentUser();
-
-        return $user !== null && $this->allows('view', new TimeEntry(['user_id' => $user->id]));
-    }
-
-    #[Computed]
     public function canCreateTimeEntries(): bool
     {
         return $this->allows('create', TimeEntry::class);
     }
 
+    /**
+     * Only decides whether the edit controls render. Each entry is still
+     * authorized on its own in saveEntryEdits().
+     */
     #[Computed]
     public function canUpdateTimeEntries(): bool
     {
-        return $this->allows('update', new TimeEntry());
+        return $this->allows('manage', TimeEntry::class);
     }
 
+    /**
+     * Only decides whether the delete buttons render. Each entry is still
+     * authorized on its own in deleteEntry().
+     */
     #[Computed]
     public function canDeleteTimeEntries(): bool
     {
-        return $this->allows('delete', new TimeEntry());
-    }
-
-    #[Computed]
-    public function canExportAttendance(): bool
-    {
-        return $this->allows('export', TimeEntry::class);
+        return $this->allows('manage', TimeEntry::class);
     }
 
     // ── View helpers ──────────────────────────────────────────────────────────

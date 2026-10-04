@@ -67,6 +67,19 @@ class AttendanceDayPanelTest extends TestCase
         return TimeEntry::factory()->forDay($workDay)->create(['user_id' => $user->id]);
     }
 
+    /**
+     * An employee on a team this test's manager has nothing to do with.
+     */
+    private function foreignEmployee(): User
+    {
+        $foreignTeam = User::factory()->withPersonalTeam()->create()->currentTeam;
+
+        $foreigner = User::factory()->create(['current_team_id' => $foreignTeam->id]);
+        $foreignTeam->users()->attach($foreigner, ['role' => TeamRole::Employee->value]);
+
+        return $foreigner;
+    }
+
     // ── Entry list ────────────────────────────────────────────────────────────
 
     public function test_it_lists_only_the_given_days_entries(): void
@@ -192,6 +205,20 @@ class AttendanceDayPanelTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_a_manager_cannot_save_an_edit_to_another_teams_entry(): void
+    {
+        $entry = $this->entryFor($this->foreignEmployee(), self::DATE);
+        $originalClockIn = $entry->clockInFormatted();
+
+        $this->panel()
+            ->set("entryEdits.{$entry->id}.clock_in", '03:00')
+            ->set("entryEdits.{$entry->id}.clock_out", '04:00')
+            ->call('saveEntryEdits', $entry->id)
+            ->assertForbidden();
+
+        $this->assertSame($originalClockIn, $entry->fresh()->clockInFormatted());
+    }
+
     // ── Deleting ──────────────────────────────────────────────────────────────
 
     public function test_a_manager_can_delete_an_entry(): void
@@ -210,6 +237,28 @@ class AttendanceDayPanelTest extends TestCase
         $entry = $this->entryFor($this->employee, self::DATE);
 
         $this->panel(as: $this->employee)
+            ->call('deleteEntry', $entry->id)
+            ->assertForbidden();
+
+        $this->assertModelExists($entry);
+    }
+
+    public function test_a_team_owner_can_delete_an_entry_on_their_own_team(): void
+    {
+        $entry = $this->entryFor($this->employee, self::DATE);
+
+        $this->panel(as: $this->owner)
+            ->call('deleteEntry', $entry->id)
+            ->assertDispatched('attendance-entries-changed');
+
+        $this->assertModelMissing($entry);
+    }
+
+    public function test_a_manager_cannot_delete_another_teams_entry(): void
+    {
+        $entry = $this->entryFor($this->foreignEmployee(), self::DATE);
+
+        $this->panel()
             ->call('deleteEntry', $entry->id)
             ->assertForbidden();
 
@@ -310,6 +359,32 @@ class AttendanceDayPanelTest extends TestCase
             ->assertHasErrors('createForm.user_id');
 
         $this->assertSame(0, TimeEntry::where('user_id', $stranger->id)->count());
+    }
+
+    public function test_a_team_owner_cannot_create_an_entry_for_another_teams_user(): void
+    {
+        $foreigner = $this->foreignEmployee();
+
+        $this->panel(as: $this->owner)
+            ->call('startCreatingEntry')
+            ->set('createForm.user_id', $foreigner->id)
+            ->set('createForm.clock_in', '08:00')
+            ->call('saveNewEntry')
+            ->assertHasErrors('createForm.user_id');
+
+        $this->assertSame(0, TimeEntry::where('user_id', $foreigner->id)->count());
+    }
+
+    public function test_a_team_owner_can_create_an_entry_for_their_own_teams_user(): void
+    {
+        $this->panel(as: $this->owner)
+            ->call('startCreatingEntry')
+            ->set('createForm.user_id', $this->employee->id)
+            ->set('createForm.clock_in', '08:00')
+            ->call('saveNewEntry')
+            ->assertHasNoErrors();
+
+        $this->assertSame(1, TimeEntry::where('user_id', $this->employee->id)->count());
     }
 
     public function test_creating_an_entry_rejects_a_clock_out_before_the_clock_in(): void

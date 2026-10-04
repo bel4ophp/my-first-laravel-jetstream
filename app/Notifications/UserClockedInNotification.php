@@ -2,6 +2,7 @@
 
 namespace App\Notifications;
 
+use App\Enums\ClockAction;
 use App\Models\TimeEntry;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
@@ -19,10 +20,8 @@ class UserClockedInNotification extends Notification implements ShouldQueue
     public function __construct(
         public User $employee,
         public TimeEntry $timeEntry,
-        public string $action
-    ) {
-        //
-    }
+        public ClockAction $action,
+    ) {}
 
     /**
      * Get the notification's delivery channels.
@@ -65,7 +64,7 @@ class UserClockedInNotification extends Notification implements ShouldQueue
     {
         return [
             'type' => 'time_tracker',
-            'action' => $this->action,
+            'action' => $this->action->value,
             'employee_id' => $this->employee->id,
             'employee_name' => $this->employee->name,
             'time_entry_id' => $this->timeEntry->id,
@@ -79,8 +78,8 @@ class UserClockedInNotification extends Notification implements ShouldQueue
     private function summary(): string
     {
         return match ($this->action) {
-            'clock_out' => "{$this->employee->name} clocked out at ".($this->timeEntry->clockOutFormatted() ?? '—'),
-            default => "{$this->employee->name} clocked in at {$this->timeEntry->clockInFormatted()}",
+            ClockAction::ClockIn => "{$this->employee->name} clocked in at {$this->timeEntry->clockInFormatted()}",
+            ClockAction::ClockOut => "{$this->employee->name} clocked out at ".($this->timeEntry->clockOutFormatted() ?? '—'),
         };
     }
 }

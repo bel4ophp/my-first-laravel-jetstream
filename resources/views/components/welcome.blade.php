@@ -1,5 +1,3 @@
-@php $isOwner = auth()->user()->ownedTeams()->exists(); @endphp
-
 <h1 class="card-title mb-4">{{ auth()->user()->name }}. Welcome to your Jetstream application!</h1>
 
 <div class="flex w-full flex-col lg:flex-row mb-4">

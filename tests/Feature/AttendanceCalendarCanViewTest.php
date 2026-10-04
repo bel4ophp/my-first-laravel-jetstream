@@ -3,34 +3,19 @@
 namespace Tests\Feature;
 
 use App\Livewire\AttendanceCalendar;
-use App\Services\AttendanceCalendarService;
+use App\Livewire\AttendanceDayPanel;
 use App\Models\Team;
 use App\Models\TimeEntry;
 use App\Models\User;
+use App\Services\AttendanceCalendarService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Laravel\Jetstream\Jetstream;
 use Livewire\Livewire;
 use Tests\TestCase;
 
 class AttendanceCalendarCanViewTest extends TestCase
 {
     use RefreshDatabase;
-
-    /**
-     * This suite needs an employee WITHOUT `view-attendance` to exercise the
-     * own-entries-only scoping fallback, so it overrides the DB-seeded roles
-     * with bespoke permission sets. Descriptions are required so these roles
-     * don't break later tests that render Jetstream's role list.
-     */
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        Jetstream::role('admin', 'Administrator', ['*'])->description('Administrator.');
-        Jetstream::role('manager', 'Manager', ['read', 'update', 'view-attendance', 'create-time-entries', 'update-time-entries', 'add-team-member', 'update-team-member', 'remove-team-member'])->description('Manager.');
-        Jetstream::role('employee', 'Employee', ['read'])->description('Employee.');
-    }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -73,7 +58,7 @@ class AttendanceCalendarCanViewTest extends TestCase
 
     public function test_manager_can_view_time_entries(): void
     {
-        $owner   = $this->makeOwner();
+        $owner = $this->makeOwner();
         $manager = $this->makeManager($owner->currentTeam);
 
         Livewire::actingAs($manager)
@@ -83,7 +68,7 @@ class AttendanceCalendarCanViewTest extends TestCase
 
     public function test_employee_can_view_time_entries(): void
     {
-        $owner    = $this->makeOwner();
+        $owner = $this->makeOwner();
         $employee = $this->makeEmployee($owner->currentTeam);
 
         Livewire::actingAs($employee)
@@ -93,39 +78,81 @@ class AttendanceCalendarCanViewTest extends TestCase
 
     // ── Data scoping ──────────────────────────────────────────────────────────
 
-    public function test_employee_sees_only_own_entries(): void
+    /**
+     * Employees see their whole team's clock-ins, so they can tell who is in
+     * today to talk to and work with.
+     */
+    public function test_employee_sees_their_teams_entries(): void
     {
-        $owner    = $this->makeOwner();
+        $owner = $this->makeOwner();
         $employee = $this->makeEmployee($owner->currentTeam);
-        $other    = $this->makeEmployee($owner->currentTeam);
+        $colleague = $this->makeEmployee($owner->currentTeam);
 
         $workDay = now()->subDay()->toDateString();
-        $year    = now()->subDay()->year;
-        $month   = now()->subDay()->month;
+        $year = now()->subDay()->year;
+        $month = now()->subDay()->month;
 
-        $ownEntry   = $this->makeEntry($employee, $workDay);
-        $otherEntry = $this->makeEntry($other, $workDay);
+        $ownEntry = $this->makeEntry($employee, $workDay);
+        $colleagueEntry = $this->makeEntry($colleague, $workDay);
 
-        $component = Livewire::actingAs($employee)
-            ->test(AttendanceCalendar::class, ['year' => $year, 'month' => $month]);
-
-        $allIds = $component->get('entriesByDay')->flatten()->pluck('id');
+        $allIds = Livewire::actingAs($employee)
+            ->test(AttendanceCalendar::class, ['year' => $year, 'month' => $month])
+            ->get('entriesByDay')->flatten()->pluck('id');
 
         $this->assertTrue($allIds->contains($ownEntry->id));
-        $this->assertFalse($allIds->contains($otherEntry->id));
+        $this->assertTrue($allIds->contains($colleagueEntry->id));
+    }
+
+    public function test_employee_does_not_see_other_teams_entries(): void
+    {
+        $employee = $this->makeEmployee($this->makeOwner()->currentTeam);
+        $stranger = $this->makeEmployee($this->makeOwner()->currentTeam);
+
+        $workDay = now()->subDay()->toDateString();
+        $strangerEntry = $this->makeEntry($stranger, $workDay);
+
+        $allIds = Livewire::actingAs($employee)
+            ->test(AttendanceCalendar::class, ['year' => now()->subDay()->year, 'month' => now()->subDay()->month])
+            ->get('entriesByDay')->flatten()->pluck('id');
+
+        $this->assertFalse($allIds->contains($strangerEntry->id));
+    }
+
+    /**
+     * Seeing the team is read-only: editing, deleting, adding and exporting
+     * stay with managers and the admin.
+     */
+    public function test_employee_sees_the_team_read_only(): void
+    {
+        $owner = $this->makeOwner();
+        $employee = $this->makeEmployee($owner->currentTeam);
+
+        Livewire::actingAs($employee)
+            ->test(AttendanceCalendar::class)
+            ->assertSet('canExportAttendance', false);
+
+        Livewire::actingAs($employee)
+            ->test(AttendanceDayPanel::class, ['date' => now()->subDay()->toDateString()])
+            ->assertSet('canCreateTimeEntries', false)
+            ->assertSet('canUpdateTimeEntries', false)
+            ->assertSet('canDeleteTimeEntries', false);
+
+        $this->actingAs($employee)
+            ->get(route('reports.attendance.export', ['type' => 'monthly']))
+            ->assertForbidden();
     }
 
     public function test_manager_sees_all_team_entries(): void
     {
-        $owner    = $this->makeOwner();
-        $manager  = $this->makeManager($owner->currentTeam);
+        $owner = $this->makeOwner();
+        $manager = $this->makeManager($owner->currentTeam);
         $employee = $this->makeEmployee($owner->currentTeam);
 
         $workDay = now()->subDay()->toDateString();
-        $year    = now()->subDay()->year;
-        $month   = now()->subDay()->month;
+        $year = now()->subDay()->year;
+        $month = now()->subDay()->month;
 
-        $managerEntry  = $this->makeEntry($manager, $workDay);
+        $managerEntry = $this->makeEntry($manager, $workDay);
         $employeeEntry = $this->makeEntry($employee, $workDay);
 
         $component = Livewire::actingAs($manager)

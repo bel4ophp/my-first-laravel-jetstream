@@ -60,7 +60,7 @@
                 </thead>
                 <tbody class="divide-y divide-gray-100 dark:divide-gray-800 text-sm text-gray-700 dark:text-gray-300">
                     @forelse ($this->holidays as $holiday)
-                        <tr>
+                        <tr wire:key="holiday-{{ $holiday->id }}">
                             <td class="px-4 py-3">{{ $holiday->date->toFormattedDateString() }}</td>
                             <td class="px-4 py-3">{{ $holiday->name }}</td>
                             <td class="px-4 py-3 text-right whitespace-nowrap">
@@ -121,7 +121,7 @@
                             $remaining = $total - $used;
                             $isEditing = $editingMemberId === $member->id;
                         @endphp
-                        <tr>
+                        <tr wire:key="member-{{ $member->id }}">
                             <td class="px-4 py-3">{{ $member->name }}</td>
                             <td class="px-4 py-3 text-gray-500 dark:text-gray-400">{{ $member->email }}</td>
                             <td class="px-4 py-3">
