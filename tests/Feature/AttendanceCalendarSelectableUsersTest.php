@@ -44,6 +44,26 @@ class AttendanceCalendarSelectableUsersTest extends TestCase
         $this->assertFalse($ids->contains($admin->id));
     }
 
+    public function test_a_team_owner_only_gets_members_of_their_own_teams(): void
+    {
+        $owner = User::factory()->withPersonalTeam()->create();
+        $member = User::factory()->create(['current_team_id' => $owner->currentTeam->id]);
+        $owner->currentTeam->users()->attach($member, ['role' => 'employee']);
+
+        $otherOwner = User::factory()->withPersonalTeam()->create();
+        $otherMember = User::factory()->create(['current_team_id' => $otherOwner->currentTeam->id]);
+        $otherOwner->currentTeam->users()->attach($otherMember, ['role' => 'employee']);
+
+        $teamless = User::factory()->create();
+
+        $ids = $this->service->selectableUsers($owner)->pluck('id');
+
+        $this->assertTrue($ids->contains($member->id));
+        $this->assertFalse($ids->contains($otherOwner->id));
+        $this->assertFalse($ids->contains($otherMember->id));
+        $this->assertFalse($ids->contains($teamless->id));
+    }
+
     public function test_admin_team_members_are_excluded_for_a_non_owner(): void
     {
         $owner = User::factory()->withPersonalTeam()->create();

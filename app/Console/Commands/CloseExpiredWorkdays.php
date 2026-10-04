@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\TimeEntry;
+use App\Services\TimeTrackingService;
 use Illuminate\Console\Attributes\Description;
 use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
@@ -13,12 +14,6 @@ use Throwable;
 #[Description('Closes shifts left open beyond the maximum shift length, capping them at that length.')]
 class CloseExpiredWorkdays extends Command
 {
-    /**
-     * A shift left open longer than this is assumed to be a forgotten clock-out
-     * and is capped rather than left running.
-     */
-    private const MAX_SHIFT_HOURS = 8;
-
     /**
      * Execute the console command.
      */
@@ -40,22 +35,25 @@ class CloseExpiredWorkdays extends Command
     }
 
     /**
-     * Expressed in PHP rather than DATE_ADD/TIMESTAMPDIFF so the command runs
-     * on any driver — the raw form only worked on MySQL, which left it
-     * untestable against the SQLite database the suite uses.
+     * Expressed in PHP rather than DATE_ADD/TIMESTAMPDIFF so the command doesn't
+     * depend on MySQL-only SQL and goes through the model like every other write.
      */
     private function closeExpiredEntries(): int
     {
         $closed = 0;
 
+        // A shift left open longer than this is assumed to be a forgotten
+        // clock-out and is capped rather than left running.
+        $maxShiftHours = TimeTrackingService::maxShiftHours();
+
         TimeEntry::query()
             ->whereNull('clock_out')
-            ->where('clock_in', '<=', now()->subHours(self::MAX_SHIFT_HOURS))
-            ->chunkById(500, function ($entries) use (&$closed) {
+            ->where('clock_in', '<=', now()->subHours($maxShiftHours))
+            ->chunkById(500, function ($entries) use (&$closed, $maxShiftHours) {
                 foreach ($entries as $entry) {
                     $entry->update([
-                        'clock_out' => $entry->clock_in->copy()->addHours(self::MAX_SHIFT_HOURS),
-                        'worked_minutes' => self::MAX_SHIFT_HOURS * 60,
+                        'clock_out' => $entry->clock_in->copy()->addHours($maxShiftHours),
+                        'worked_minutes' => $maxShiftHours * 60,
                     ]);
 
                     $closed++;

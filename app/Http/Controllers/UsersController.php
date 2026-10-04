@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Actions\Jetstream\ProvisionTeamMember;
+use App\Enums\TeamRole;
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
 use App\Models\Role;
@@ -12,33 +14,24 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Password;
-use Illuminate\Support\Str;
+use Laravel\Jetstream\Contracts\DeletesUsers;
 
 class UsersController extends Controller
 {
     public function index(Request $request): View
     {
-        /** @var User $user The route is behind auth, so this is never null. */
-        $user = Auth::user();
-
+        // Only the admin reaches this screen (UserPolicy), so the list is unscoped.
         $users = User::query()
-            // Mirrors UserPolicy::ownsATeamOf() so the list shows exactly the
-            // users its row actions will allow. The previous condition keyed
-            // off isTeamManager(), which is false for an owner — they hold no
-            // team_user row — so the list came back unscoped.
-            ->unless($user->is_admin, fn (Builder $query) => $query->whereHas(
-                'teams',
-                fn (Builder $teams) => $teams->whereIn('teams.id', $user->ownedTeams()->select('teams.id'))
-            ))
+            ->with('currentTeam')
             ->when(
                 $request->string('search')->trim()->value(),
                 fn (Builder $query, string $search) => $query->where(
                     // A leading wildcard cannot use an index. Acceptable at
                     // this scale; revisit with a fulltext index if the users
-                    // table grows.
-                    fn (Builder $match) => $match->where('name', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%")
+                    // table grows. The typed text is escaped so % and _ are
+                    // searched for literally rather than acting as wildcards.
+                    fn (Builder $match) => $match->whereLike('name', '%'.$this->escapeLike($search).'%')
+                        ->orWhereLike('email', '%'.$this->escapeLike($search).'%')
                 )
             )
             ->orderBy('name')
@@ -48,44 +41,31 @@ class UsersController extends Controller
         return view('users', compact('users'));
     }
 
+    private function escapeLike(string $value): string
+    {
+        return addcslashes($value, '\\%_');
+    }
+
     public function create(): View
     {
         $this->authorize('create', User::class);
 
         $teams = Team::where('personal_team', false)->get();
-        $roles = Role::all();
+        $roles = Role::whereIn('key', TeamRole::assignableBy(Auth::user()))->get();
 
         return view('users.create', compact('teams', 'roles'));
     }
 
-    public function store(StoreUserRequest $request): RedirectResponse
+    public function store(StoreUserRequest $request, ProvisionTeamMember $provisioner): RedirectResponse
     {
         $validated = $request->validated();
 
-        // Create the user
-        $user = User::create([
-            'name' => $validated['name'],
-            'email' => $validated['email'],
-            'password' => bcrypt(Str::random(16)),
-        ]);
-
-        // Assign user to selected team
-        if ($validated['team_id'] ?? null) {
-            $selectedTeam = Team::find($validated['team_id']);
-            if ($selectedTeam) {
-                $roleKey = $validated['role'];
-                $selectedTeam->users()->attach($user, ['role' => $roleKey]);
-
-                // Use Jetstream’s built-in helper
-                $user->switchTeam($selectedTeam);
-            }
-        }
-
-        // Generate password reset token
-        $token = Password::createToken($user);
-
-        // Send password reset notification
-        $user->sendPasswordResetNotification($token);
+        $provisioner->provision(
+            Team::findOrFail($validated['team_id']),
+            $validated['name'],
+            $validated['email'],
+            $validated['role'],
+        );
 
         return redirect()->route('users.index')->with('success', 'User created successfully. Password reset link sent to their email.');
     }
@@ -104,11 +84,14 @@ class UsersController extends Controller
         return redirect()->route('users.index')->with('success', 'User updated successfully.');
     }
 
-    public function destroy(User $user): RedirectResponse
+    public function destroy(User $user, DeletesUsers $deleter): RedirectResponse
     {
         $this->authorize('delete', $user);
 
-        $user->delete();
+        // The same action as Jetstream's own account deletion: team_user has no
+        // foreign keys and tokens are polymorphic, so a bare delete() would
+        // leave both behind.
+        $deleter->delete($user);
 
         return redirect()->route('users.index')->with('success', 'User deleted successfully.');
     }

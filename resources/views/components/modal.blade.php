@@ -14,8 +14,10 @@ $maxWidth = [
 ][$maxWidth ?? '2xl'];
 @endphp
 
+{{-- $wire.$entangle() rather than the @entangle directive, which the Livewire 3
+     docs advise against; .live on the caller's wire:model is carried over. --}}
 <div
-    x-data="{ show: @entangle($attributes->wire('model')) }"
+    x-data="{ show: $wire.$entangle(@js($attributes->wire('model')->value()), @js($attributes->wire('model')->hasModifier('live'))) }"
     x-on:close.stop="show = false"
     x-on:keydown.escape.window="show = false"
     x-show="show"

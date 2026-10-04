@@ -23,7 +23,7 @@ class LeaveRecalculationService
      * balance is adjusted by the difference so the pool stays truthful.
      *
      * @param  array<int, string>  $dates  affected dates (Y-m-d)
-     * @return int  the number of requests whose day count changed
+     * @return int the number of requests whose day count changed
      */
     public function recalculateForTeam(Team $team, array $dates): int
     {

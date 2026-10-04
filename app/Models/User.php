@@ -3,13 +3,14 @@
 namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
-use Database\Factories\UserFactory;
 use App\Enums\TeamRole;
+use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Jetstream\HasProfilePhoto;
 use Laravel\Jetstream\HasTeams;
@@ -31,13 +32,15 @@ class User extends Authenticatable
     /**
      * The attributes that are mass assignable.
      *
+     * is_admin is deliberately absent: it grants every permission through
+     * Gate::before, so it is only ever set explicitly with forceFill().
+     *
      * @var array<int, string>
      */
     protected $fillable = [
         'name',
         'email',
         'password',
-        'is_admin',
     ];
 
     /**
@@ -75,15 +78,21 @@ class User extends Authenticatable
         ];
     }
 
+    /**
+     * Up to two initials, e.g. "ĐŠ" for "Đorđe Šaković". Multibyte-safe: the
+     * byte-based substr()/strtoupper() cut letters like "Đ" in half.
+     */
     protected function initials(): Attribute
     {
         return Attribute::make(
-            get: fn () => collect(explode(' ', $this->name))
-                ->map(fn ($segment) => strtoupper(substr($segment, 0, 1)))
-                ->join('')
+            get: fn () => Str::of($this->name)
+                ->squish()
+                ->explode(' ')
+                ->take(2)
+                ->map(fn (string $segment) => Str::upper(Str::substr($segment, 0, 1)))
+                ->implode('')
         );
     }
-
 
     /**
      * The display label for this user's role on their primary team.

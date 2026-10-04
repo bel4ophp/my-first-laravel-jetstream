@@ -2,6 +2,7 @@
 
 namespace App\Listeners;
 
+use App\Enums\ClockAction;
 use App\Enums\TeamRole;
 use App\Events\UserClockedInEvent;
 use App\Models\User;
@@ -17,7 +18,7 @@ class UserClockedInListener
     {
         $user = $event->user;
         $currentTeam = $user->currentTeam;
-        if (!$currentTeam) {
+        if (! $currentTeam) {
             return;
         }
 
@@ -30,7 +31,7 @@ class UserClockedInListener
                 new UserClockedInNotification(
                     $user,
                     $event->timeEntry,
-                    'clock_in'
+                    ClockAction::ClockIn
                 )
             );
         }
@@ -48,7 +49,7 @@ class UserClockedInListener
                 new UserClockedInNotification(
                     $user,
                     $event->timeEntry,
-                    'clock_in'
+                    ClockAction::ClockIn
                 )
             );
         }
@@ -66,7 +67,7 @@ class UserClockedInListener
             new UserClockedInNotification(
                 $user,
                 $event->timeEntry,
-                'clock_in'
+                ClockAction::ClockIn
             )
         );
     }

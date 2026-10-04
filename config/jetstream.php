@@ -62,7 +62,10 @@ return [
         // Features::profilePhotos(),
         // Features::api(),
         Features::teams(['invitations' => true]),
-        Features::accountDeletion(),
+        // Off: users are deleted by the admin from the Users screen, where
+        // UserPolicy stops admins being deleted. Self-service deletion would
+        // bypass that and let the last admin delete their own account.
+        // Features::accountDeletion(),
     ],
 
     /*

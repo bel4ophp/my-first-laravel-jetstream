@@ -6,6 +6,7 @@ use App\Actions\Jetstream\AddTeamMember;
 use App\Enums\LeaveStatus;
 use App\Enums\LeaveType;
 use App\Livewire\LeaveApprovals;
+use App\Livewire\Teams\TeamMemberManager;
 use App\Models\LeaveBalance;
 use App\Models\LeaveRequest;
 use App\Models\Team;
@@ -15,7 +16,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
-use Laravel\Jetstream\Http\Livewire\TeamMemberManager;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -307,6 +307,7 @@ class LeaveApprovalTest extends TestCase
     public function test_a_member_cannot_be_promoted_to_a_second_manager(): void
     {
         $owner = $this->makeOwner();
+        $owner->forceFill(['is_admin' => true])->save(); // only the admin changes roles
         $this->makeManager($owner->currentTeam);
         $employee = $this->makeEmployee($owner->currentTeam);
 
@@ -323,6 +324,7 @@ class LeaveApprovalTest extends TestCase
     public function test_the_existing_manager_can_be_resaved_as_manager(): void
     {
         $owner = $this->makeOwner();
+        $owner->forceFill(['is_admin' => true])->save(); // only the admin changes roles
         $manager = $this->makeManager($owner->currentTeam);
 
         Livewire::actingAs($owner)
@@ -338,6 +340,7 @@ class LeaveApprovalTest extends TestCase
     public function test_a_team_without_a_manager_still_accepts_one(): void
     {
         $owner = $this->makeOwner();
+        $owner->forceFill(['is_admin' => true])->save(); // only the admin changes roles
         $employee = $this->makeEmployee($owner->currentTeam);
 
         Livewire::actingAs($owner)

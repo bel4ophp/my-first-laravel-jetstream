@@ -5,7 +5,11 @@ import fs from 'fs';
 // Load the .env file manually so we can use it outside of the export
 const env = loadEnv('', process.cwd(), '');
 
-const hasCert = fs.existsSync(env.VITE_SSL_CERT);
+// The dev-server settings below need a URL, but `vite build` doesn't: fall
+// back rather than crash when VITE_APP_URL isn't in the environment.
+const appUrl = env.VITE_APP_URL || env.APP_URL || 'http://localhost';
+
+const hasCert = Boolean(env.VITE_SSL_CERT && env.VITE_SSL_KEY) && fs.existsSync(env.VITE_SSL_CERT);
 
 export default defineConfig({
     server: {
@@ -14,7 +18,7 @@ export default defineConfig({
         port: 5173,
         cors: true,
         strictPort: true,
-        origin: `${env.VITE_APP_URL}:5173`,
+        origin: `${appUrl}:5173`,
         https: hasCert ? {
             key: fs.readFileSync(env.VITE_SSL_KEY), 
             cert: fs.readFileSync(env.VITE_SSL_CERT),
@@ -22,7 +26,7 @@ export default defineConfig({
         hmr: {
             // This is how the browser talks back to Vite for live updates.
             // host must be the bare hostname — Vite adds the protocol itself.
-            host: env.VITE_APP_URL.replace(/^https?:\/\//, ''),
+            host: appUrl.replace(/^https?:\/\//, ''),
             protocol: hasCert ? 'wss' : 'ws',
         },
     },

@@ -12,10 +12,10 @@ enum LeaveStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::Pending => 'Pending',
-            self::Approved => 'Approved',
-            self::Denied => 'Denied',
-            self::Cancelled => 'Cancelled',
+            self::Pending => __('Pending'),
+            self::Approved => __('Approved'),
+            self::Denied => __('Denied'),
+            self::Cancelled => __('Cancelled'),
         };
     }
 }

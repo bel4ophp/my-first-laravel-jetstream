@@ -14,14 +14,14 @@ class AdminSeeder extends Seeder
             [
                 'name' => 'System Admin',
                 'password' => 'password',
-                'is_admin' => true,
-                'email_verified_at' => now(),
             ]
         );
 
-        // Ensure is_admin is set on re-runs where the record already existed
-        if (! $admin->is_admin) {
-            $admin->update(['is_admin' => true]);
-        }
+        // Set explicitly: is_admin and email_verified_at aren't mass assignable,
+        // and this also restores the flag on re-runs against an existing record.
+        $admin->forceFill([
+            'is_admin' => true,
+            'email_verified_at' => $admin->email_verified_at ?? now(),
+        ])->save();
     }
 }

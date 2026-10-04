@@ -3,18 +3,18 @@
 namespace App\Actions\Jetstream;
 
 use App\Enums\TeamRole;
-use App\Rules\BelongsToNoOtherTeam;
 use App\Models\Team;
 use App\Models\User;
+use App\Rules\BelongsToNoOtherTeam;
 use Closure;
-use Illuminate\Contracts\Validation\Rule;
+use Illuminate\Contracts\Validation\Rule as ValidationRule;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Laravel\Jetstream\Contracts\AddsTeamMembers;
 use Laravel\Jetstream\Events\AddingTeamMember;
 use Laravel\Jetstream\Events\TeamMemberAdded;
 use Laravel\Jetstream\Jetstream;
-use Laravel\Jetstream\Rules\Role;
 
 class AddTeamMember implements AddsTeamMembers
 {
@@ -25,7 +25,7 @@ class AddTeamMember implements AddsTeamMembers
     {
         Gate::forUser($user)->authorize('addTeamMember', $team);
 
-        $this->validate($team, $email, $role);
+        $this->validate($user, $team, $email, $role);
 
         $newTeamMember = Jetstream::findUserByEmailOrFail($email);
 
@@ -41,12 +41,12 @@ class AddTeamMember implements AddsTeamMembers
     /**
      * Validate the add member operation.
      */
-    protected function validate(Team $team, string $email, ?string $role): void
+    protected function validate(User $user, Team $team, string $email, ?string $role): void
     {
         Validator::make([
             'email' => $email,
             'role' => $role,
-        ], $this->rules($team), [
+        ], $this->rules($user, $team), [
             'email.exists' => __('We were unable to find a registered user with this email address.'),
         ])
             ->after($this->ensureUserIsNotAlreadyOnTeam($team, $email))
@@ -57,13 +57,13 @@ class AddTeamMember implements AddsTeamMembers
     /**
      * Get the validation rules for adding a team member.
      *
-     * @return array<string, Rule|array|string>
+     * @return array<string, ValidationRule|array|string>
      */
-    protected function rules(Team $team): array
+    protected function rules(User $user, Team $team): array
     {
         return array_filter([
             'email' => ['required', 'email', 'exists:users', new BelongsToNoOtherTeam($team)],
-            'role' => Jetstream::hasRoles() ? ['required', 'string', new Role] : null,
+            'role' => Jetstream::hasRoles() ? ['required', 'string', Rule::in(TeamRole::assignableBy($user, $team))] : null,
         ]);
     }
 

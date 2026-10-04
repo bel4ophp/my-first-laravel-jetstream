@@ -2,9 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Livewire\Teams\TeamMemberManager;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Laravel\Jetstream\Http\Livewire\TeamMemberManager;
 use Livewire\Livewire;
 use Tests\TestCase;
 
@@ -12,25 +12,30 @@ class LeaveTeamTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_users_can_leave_teams(): void
+    /**
+     * Members don't leave on their own; the admin, or a manager for their own
+     * team's employees, removes people.
+     */
+    public function test_members_cannot_leave_teams(): void
     {
-        $user = User::factory()->withPersonalTeam()->create();
+        $user = User::factory()->withPersonalTeam()->create(['is_admin' => true]);
 
         $user->currentTeam->users()->attach(
-            $otherUser = User::factory()->create(), ['role' => 'admin']
+            $otherUser = User::factory()->create(), ['role' => 'employee']
         );
 
         $this->actingAs($otherUser);
 
         Livewire::test(TeamMemberManager::class, ['team' => $user->currentTeam])
-            ->call('leaveTeam');
+            ->call('leaveTeam')
+            ->assertForbidden();
 
-        $this->assertCount(0, $user->currentTeam->fresh()->users);
+        $this->assertCount(1, $user->currentTeam->fresh()->users);
     }
 
     public function test_team_owners_cant_leave_their_own_team(): void
     {
-        $this->actingAs($user = User::factory()->withPersonalTeam()->create());
+        $this->actingAs($user = User::factory()->withPersonalTeam()->create(['is_admin' => true]));
 
         Livewire::test(TeamMemberManager::class, ['team' => $user->currentTeam])
             ->call('leaveTeam')

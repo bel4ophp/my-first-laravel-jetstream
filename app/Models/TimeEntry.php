@@ -22,10 +22,10 @@ class TimeEntry extends Model
     ];
 
     /**
-     * `date:Y-m-d` keeps writes as a plain date, matching the DATE column and
-     * the other models in this app. A bare `date` cast writes "Y-m-d H:i:s",
-     * which MySQL truncates but SQLite stores verbatim — breaking the equality
-     * and range comparisons the onDay()/forMonth() scopes rely on.
+     * `date:Y-m-d` shapes how work_day is serialized, not how it is written: a
+     * Carbon is sent to the database as "Y-m-d H:i:s" and the DATE column drops
+     * the time. Assigning a "Y-m-d" string (today()->toDateString()) keeps the
+     * write identical to what the onDay()/forMonth() scopes compare against.
      */
     protected function casts(): array
     {
@@ -110,7 +110,9 @@ class TimeEntry extends Model
             $mins = (int) $this->clock_in->diffInMinutes($this->clock_out);
         }
 
-        if (! $mins) return null;
+        if (! $mins) {
+            return null;
+        }
 
         $h = intdiv($mins, 60);
         $m = $mins % 60;
@@ -126,6 +128,7 @@ class TimeEntry extends Model
     {
         if ($this->isActive()) {
             $threshold = $this->clock_in->copy()->setTime($lateHour, $lateMinute);
+
             return $this->clock_in->gt($threshold) ? 'late' : 'in';
         }
 

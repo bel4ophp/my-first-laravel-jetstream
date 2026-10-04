@@ -27,10 +27,10 @@ class LeaveRequest extends Model
     ];
 
     /**
-     * `date:Y-m-d` keeps writes as plain dates. A bare `date` cast writes
-     * "Y-m-d H:i:s", which MySQL truncates but SQLite stores verbatim —
-     * breaking range comparisons (e.g. a request starting exactly on a
-     * holiday date would fail a `start_date <= :date` overlap check).
+     * `date:Y-m-d` shapes serialization, not writes: a Carbon is sent as
+     * "Y-m-d H:i:s" and the DATE column drops the time. Writers pass "Y-m-d"
+     * strings so stored values match the range comparisons (e.g. the
+     * `start_date <= :date` overlap check) exactly.
      */
     protected function casts(): array
     {

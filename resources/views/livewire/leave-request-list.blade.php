@@ -10,6 +10,12 @@
 @endphp
 
 <div>
+    @if (session('leave-error'))
+        <div class="mb-4 rounded-lg bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 px-4 py-3 text-sm text-red-700 dark:text-red-300">
+            {{ session('leave-error') }}
+        </div>
+    @endif
+
     <h3 class="font-semibold text-lg text-gray-800 dark:text-gray-200 mb-4">My Leave Requests</h3>
 
     <div class="overflow-x-auto">
@@ -25,7 +31,7 @@
             </thead>
             <tbody class="divide-y divide-gray-100 dark:divide-gray-800 text-sm text-gray-700 dark:text-gray-300">
                 @forelse ($this->requests as $request)
-                    <tr>
+                    <tr wire:key="request-{{ $request->id }}">
                         <td class="px-4 py-3">{{ $request->type->label() }}</td>
                         <td class="px-4 py-3">
                             {{ $request->start_date->toFormattedDateString() }}

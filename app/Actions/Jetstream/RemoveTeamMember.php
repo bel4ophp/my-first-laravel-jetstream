@@ -4,7 +4,6 @@ namespace App\Actions\Jetstream;
 
 use App\Models\Team;
 use App\Models\User;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\ValidationException;
 use Laravel\Jetstream\Contracts\RemovesTeamMembers;
@@ -28,13 +27,14 @@ class RemoveTeamMember implements RemovesTeamMembers
 
     /**
      * Authorize that the user can remove the team member.
+     *
+     * Jetstream's version lets any member remove themselves ("leave team").
+     * Here nobody leaves on their own: the admin removes people, and a manager
+     * removes their own team's employees.
      */
     protected function authorize(User $user, Team $team, User $teamMember): void
     {
-        if (! Gate::forUser($user)->check('removeTeamMember', $team) &&
-            $user->id !== $teamMember->id) {
-            throw new AuthorizationException;
-        }
+        Gate::forUser($user)->authorize('removeMember', [$team, $teamMember]);
     }
 
     /**

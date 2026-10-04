@@ -28,18 +28,13 @@
                     </div>
 
                     <!-- Role -->
-                    @if (count($this->roles) > 0)
+                    @if (count($this->assignableRoles) > 0)
                         <div class="col-span-6 lg:col-span-4">
                             <x-label for="role" value="{{ __('Role') }}" />
                             <x-input-error for="role" class="mt-2" />
 
                             <div class="relative z-0 mt-1 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer">
-                                @foreach ($this->roles as $index => $role)
-                                    @if($role->key === 'admin')
-                                        @continue
-                                    @elseif (auth()->user()->isTeamManager() && $role->key === 'manager')
-                                        @continue
-                                    @endif
+                                @foreach ($this->assignableRoles as $index => $role)
                                     <button type="button" class="relative px-4 py-3 inline-flex w-full rounded-lg focus:z-10 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 {{ $index > 0 ? 'border-t border-gray-200 dark:border-gray-700 focus:border-none rounded-t-none' : '' }} {{ ! $loop->last ? 'rounded-b-none' : '' }}"
                                                     wire:click="$set('addTeamMemberForm.role', '{{ $role->key }}')">
                                         <div class="{{ isset($addTeamMemberForm['role']) && $addTeamMemberForm['role'] !== $role->key ? 'opacity-50' : '' }}">
@@ -166,15 +161,8 @@
                                         @endif
                                     @endif
 
-                                    <!-- Leave Team -->
-                                    @if ($this->user->id === $user->id)
-                                        <button class="cursor-pointer ms-2 text-sm text-red-500" wire:click="$toggle('confirmingLeavingTeam')">
-                                            {{-- {{ __('Leave') }} --}}
-                                            <x-lucide-unplug class="w-5 h-5" />
-                                        </button>
-
-                                    <!-- Remove Team Member -->
-                                    @elseif (Gate::check('removeTeamMember', $team))
+                                    <!-- Remove Team Member (nobody leaves on their own) -->
+                                    @if (Gate::check('removeMember', [$team, $user]))
                                         <button class="cursor-pointer ms-2 text-sm text-red-500" wire:click="confirmTeamMemberRemoval('{{ $user->id }}')">
                                             {{-- {{ __('Remove') }} --}}
                                             <x-lucide-user-round-x class="w-5 h-5" />
@@ -206,7 +194,7 @@
         <x-slot name="content">
             @if(auth()->user()->is_admin)
             <div class="relative z-0 mt-1 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer">
-                @foreach ($this->roles as $index => $role)
+                @foreach ($this->assignableRoles as $index => $role)
                     <button type="button" class="relative px-4 py-3 inline-flex w-full rounded-lg focus:z-10 focus:outline-none focus:border-indigo-500 dark:focus:border-indigo-600 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-600 {{ $index > 0 ? 'border-t border-gray-200 dark:border-gray-700 focus:border-none rounded-t-none' : '' }} {{ ! $loop->last ? 'rounded-b-none' : '' }}"
                                     wire:click="$set('currentRole', '{{ $role->key }}')">
                         <div class="{{ $currentRole !== $role->key ? 'opacity-50' : '' }}">

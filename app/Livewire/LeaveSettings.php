@@ -6,11 +6,10 @@ use App\Models\Holiday;
 use App\Models\LeaveRequest;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\HolidayService;
 use App\Services\LeaveBalanceService;
-use App\Services\LeaveRecalculationService;
 use App\Services\LeaveResetService;
 use Illuminate\Contracts\View\View;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -23,25 +22,40 @@ class LeaveSettings extends Component
 
     // ── Holiday form state ────────────────────────────────────────────────────
     public ?int $editingHolidayId = null;
+
     public string $holidayName = '';
+
     public string $holidayDate = '';
 
     // ── Member days-off edit state ───────────────────────────────────────────
     public ?int $editingMemberId = null;
+
     public ?int $memberTotalDays = null;
 
     protected LeaveResetService $resetService;
+
     protected LeaveBalanceService $balances;
-    protected LeaveRecalculationService $recalculator;
+
+    protected HolidayService $holidayService;
 
     public function boot(
         LeaveResetService $resetService,
         LeaveBalanceService $balances,
-        LeaveRecalculationService $recalculator,
+        HolidayService $holidayService,
     ): void {
         $this->resetService = $resetService;
         $this->balances = $balances;
-        $this->recalculator = $recalculator;
+        $this->holidayService = $holidayService;
+    }
+
+    /**
+     * Runs before every action on an already-open page. mount() only runs on
+     * the first load, so without this a manager demoted mid-session could keep
+     * editing holidays and days off from a tab they left open.
+     */
+    public function hydrate(): void
+    {
+        $this->authorize('manageSettings', LeaveRequest::class);
     }
 
     public function mount(): void
@@ -67,13 +81,18 @@ class LeaveSettings extends Component
             : collect([Auth::user()->currentTeam]);
     }
 
+    /**
+     * teamId comes from the browser, so the policy decides whether this user
+     * may manage the team it names.
+     */
     #[Computed]
     public function selectedTeam(): Team
     {
-        // Guards against a manager tampering with teamId to reach another team.
-        abort_unless($this->teams->contains('id', $this->teamId), 403);
+        $team = Team::findOrFail($this->teamId);
 
-        return $this->teams->firstWhere('id', $this->teamId);
+        $this->authorize('manageLeaveSettings', $team);
+
+        return $team;
     }
 
     /**
@@ -88,7 +107,7 @@ class LeaveSettings extends Component
     /**
      * Members whose pool the reset button will affect.
      *
-     * @return Collection<int, \App\Models\User>
+     * @return Collection<int, User>
      */
     #[Computed]
     public function members(): Collection
@@ -113,29 +132,15 @@ class LeaveSettings extends Component
             ],
         ]);
 
-        // On an edit the holiday may be moving, so both the old and the new
-        // date can affect existing requests.
-        $affectedDates = [];
-
-        if ($this->editingHolidayId) {
-            $affectedDates[] = $team->holidays()
-                ->findOrFail($this->editingHolidayId)
-                ->date->toDateString();
-        }
-
-        Holiday::updateOrCreate(
-            ['id' => $this->editingHolidayId],
-            [
-                'team_id' => $team->id,
-                'name' => $data['holidayName'],
-                'date' => $data['holidayDate'],
-            ],
+        $changed = $this->holidayService->save(
+            $team,
+            $data['holidayName'],
+            $data['holidayDate'],
+            $this->editingHolidayId ? $team->holidays()->findOrFail($this->editingHolidayId) : null,
         );
 
-        $affectedDates[] = Carbon::parse($data['holidayDate'])->toDateString();
-
         $this->resetHolidayForm();
-        $this->afterHolidayChange($team, $affectedDates, 'Holiday saved.');
+        $this->afterHolidayChange($changed, __('Holiday saved.'));
     }
 
     public function editHoliday(int $holidayId): void
@@ -149,14 +154,10 @@ class LeaveSettings extends Component
 
     public function deleteHoliday(int $holidayId): void
     {
-        $team = $this->selectedTeam;
-        $holiday = $team->holidays()->findOrFail($holidayId);
-        $affectedDate = $holiday->date->toDateString();
-
-        $holiday->delete();
+        $changed = $this->holidayService->delete($this->selectedTeam->holidays()->findOrFail($holidayId));
 
         $this->resetHolidayForm();
-        $this->afterHolidayChange($team, [$affectedDate], 'Holiday deleted.');
+        $this->afterHolidayChange($changed, __('Holiday deleted.'));
     }
 
     public function resetHolidayForm(): void
@@ -166,19 +167,14 @@ class LeaveSettings extends Component
     }
 
     /**
-     * Holidays feed the working-day count, so any change re-derives the day
-     * count on requests that span the affected dates.
-     *
-     * @param  array<int, string>  $affectedDates
+     * @param  int  $changed  existing requests HolidayService recalculated
      */
-    private function afterHolidayChange(Team $team, array $affectedDates, string $message): void
+    private function afterHolidayChange(int $changed, string $message): void
     {
-        $changed = $this->recalculator->recalculateForTeam($team, $affectedDates);
-
         unset($this->holidays, $this->members);
 
         if ($changed > 0) {
-            $message .= " {$changed} existing request(s) recalculated.";
+            $message .= ' '.__(':count existing request(s) recalculated.', ['count' => $changed]);
         }
 
         session()->flash('leave-success', $message);
@@ -188,46 +184,35 @@ class LeaveSettings extends Component
 
     public function editMember(int $userId): void
     {
-        $this->guardMemberInScope($userId);
+        $member = User::findOrFail($userId);
+        $this->authorize('manageLeaveBalance', $member);
 
-        $this->editingMemberId = $userId;
-        $this->memberTotalDays = $this->balances->currentBalance(User::findOrFail($userId))->total_days;
+        $this->editingMemberId = $member->id;
+        $this->memberTotalDays = $this->balances->currentBalance($member)->total_days;
         $this->resetValidation();
     }
 
     public function saveMember(): void
     {
-        $this->guardMemberInScope($this->editingMemberId);
+        $member = User::findOrFail($this->editingMemberId);
+        $this->authorize('manageLeaveBalance', $member);
 
         $data = $this->validate([
             'memberTotalDays' => ['required', 'integer', 'min:0', 'max:365'],
         ]);
 
-        $member = User::findOrFail($this->editingMemberId);
-
-        $this->balances->currentBalance($member)->update(['total_days' => $data['memberTotalDays']]);
+        $this->balances->setTotalDays($member, $data['memberTotalDays']);
 
         $this->cancelMemberEdit();
         unset($this->members);
 
-        session()->flash('leave-success', "Updated available days for {$member->name}.");
+        session()->flash('leave-success', __('Updated available days for :name.', ['name' => $member->name]));
     }
 
     public function cancelMemberEdit(): void
     {
         $this->reset(['editingMemberId', 'memberTotalDays']);
         $this->resetValidation();
-    }
-
-    /**
-     * A manager may only touch their own team's members; the admin, anyone.
-     */
-    private function guardMemberInScope(?int $userId): void
-    {
-        abort_unless(
-            $userId !== null && $this->resetService->scopedUserIds(Auth::user())->contains($userId),
-            403,
-        );
     }
 
     // ── Pool reset ────────────────────────────────────────────────────────────
@@ -240,7 +225,7 @@ class LeaveSettings extends Component
 
         unset($this->members);
 
-        session()->flash('leave-success', "Available days reset for {$count} member(s).");
+        session()->flash('leave-success', __('Available days reset for :count member(s).', ['count' => $count]));
     }
 
     public function render(): View

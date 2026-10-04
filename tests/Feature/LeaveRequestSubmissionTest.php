@@ -276,6 +276,28 @@ class LeaveRequestSubmissionTest extends TestCase
         $this->assertSame(LeaveStatus::Approved, $request->fresh()->status);
     }
 
+    // ── Users on no team ──────────────────────────────────────────────────────
+
+    /**
+     * Holidays — and so the working-day count — are per team. A user on no team
+     * used to crash the form as soon as both dates were filled in.
+     */
+    public function test_a_user_on_no_team_gets_a_message_instead_of_an_error(): void
+    {
+        $teamless = User::factory()->create();
+
+        Livewire::actingAs($teamless)
+            ->test(LeaveRequestForm::class)
+            ->set('type', 'annual')
+            ->set('startDate', '2026-06-15')
+            ->set('endDate', '2026-06-19')
+            ->assertOk()
+            ->call('submit')
+            ->assertHasErrors('type');
+
+        $this->assertSame(0, LeaveRequest::where('user_id', $teamless->id)->count());
+    }
+
     // ── Overlapping ranges ────────────────────────────────────────────────────
 
     /**

@@ -2,18 +2,23 @@
 
 namespace App\Services;
 
-use App\Enums\TeamRole;
 use App\Enums\LeaveStatus;
 use App\Enums\LeaveType;
+use App\Enums\TeamRole;
+use App\Exceptions\InsufficientLeaveDays;
+use App\Exceptions\LeaveRequestAlreadyDecided;
+use App\Exceptions\NoWorkingDaysInRange;
+use App\Exceptions\OverlappingLeaveRequest;
 use App\Models\LeaveRequest;
 use App\Models\User;
+use App\Notifications\LeaveRequestCancelled;
 use App\Notifications\LeaveRequestStatusChanged;
 use App\Notifications\LeaveRequestSubmitted;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\DB;
 
 class LeaveRequestService
 {
@@ -26,39 +31,42 @@ class LeaveRequestService
     /**
      * Create a pending leave request and notify its approver.
      *
-     * @throws ValidationException when the range yields no working days
-     *                             or the pool cannot cover the request.
+     * The submitter's user row is locked for the duration, so two submissions
+     * from the same person run one after the other and the overlap check always
+     * sees a request the other one just created.
+     *
+     * @throws NoWorkingDaysInRange when the range holds only weekends/holidays
+     * @throws OverlappingLeaveRequest when a live request covers part of it
+     * @throws InsufficientLeaveDays when the pool cannot cover it
      */
     public function submit(User $user, LeaveType $type, Carbon $start, Carbon $end, ?string $notes = null): LeaveRequest
     {
         $days = $this->calculator->workingDays($user->currentTeam, $start, $end);
 
         if ($days < 1) {
-            throw ValidationException::withMessages([
-                'startDate' => 'The selected range contains no working days (only weekends/holidays).',
-            ]);
+            throw new NoWorkingDaysInRange;
         }
 
-        if ($this->hasOverlappingRequest($user, $start, $end)) {
-            throw ValidationException::withMessages([
-                'startDate' => 'You already have a leave request covering part of this range.',
-            ]);
-        }
+        $leaveRequest = DB::transaction(function () use ($user, $type, $start, $end, $days, $notes) {
+            User::whereKey($user->getKey())->lockForUpdate()->first();
 
-        if (! $this->balances->hasSufficientDays($user, $type, $days, $start->year)) {
-            throw ValidationException::withMessages([
-                'type' => "Insufficient leave days. You have {$this->balances->remainingDays($user, $start->year)} day(s) remaining.",
-            ]);
-        }
+            if ($this->hasOverlappingRequest($user, $start, $end)) {
+                throw new OverlappingLeaveRequest;
+            }
 
-        $leaveRequest = $user->leaveRequests()->create([
-            'type' => $type,
-            'start_date' => $start->toDateString(),
-            'end_date' => $end->toDateString(),
-            'calculated_days' => $days,
-            'status' => LeaveStatus::Pending,
-            'notes' => $notes,
-        ]);
+            if (! $this->balances->hasSufficientDays($user, $type, $days, $start->year)) {
+                throw InsufficientLeaveDays::toSubmit($this->balances->remainingDays($user, $start->year));
+            }
+
+            return $user->leaveRequests()->create([
+                'type' => $type,
+                'start_date' => $start->toDateString(),
+                'end_date' => $end->toDateString(),
+                'calculated_days' => $days,
+                'status' => LeaveStatus::Pending,
+                'notes' => $notes,
+            ]);
+        });
 
         $this->approverResolver->resolve($user)?->notify(new LeaveRequestSubmitted($leaveRequest));
 
@@ -136,29 +144,39 @@ class LeaveRequestService
     /**
      * Approve a pending request, deducting pool days and notifying the submitter.
      *
-     * @throws ValidationException when the pool can no longer cover the request.
+     * The request and the balance are both locked, so a second approval, a
+     * denial or a cancellation racing this one waits and then finds the request
+     * already decided; and two approvals for the same person can't both pass
+     * the balance check against the same remaining days.
+     *
+     * @throws LeaveRequestAlreadyDecided when someone else decided it first
+     * @throws InsufficientLeaveDays when the pool can no longer cover it
      */
     public function approve(LeaveRequest $leaveRequest, User $approver): LeaveRequest
     {
-        $year = $leaveRequest->start_date->year;
+        $leaveRequest = DB::transaction(function () use ($leaveRequest, $approver) {
+            $locked = $this->lockPending($leaveRequest);
+            $year = $locked->start_date->year;
 
-        if ($leaveRequest->type->deductsFromPool()
-            && ! $this->balances->hasSufficientDays($leaveRequest->user, $leaveRequest->type, $leaveRequest->calculated_days, $year)
-        ) {
-            throw ValidationException::withMessages([
-                'approval' => "Cannot approve: {$leaveRequest->user->name} no longer has enough days in the pool.",
+            if ($locked->type->deductsFromPool()) {
+                $this->balances->lockBalance($locked->user, $year);
+
+                if (! $this->balances->hasSufficientDays($locked->user, $locked->type, $locked->calculated_days, $year)) {
+                    throw InsufficientLeaveDays::toApprove($locked->user);
+                }
+
+                $this->balances->deduct($locked->user, $locked->calculated_days, $year);
+            }
+
+            $locked->update([
+                'status' => LeaveStatus::Approved,
+                'approved_by' => $approver->id,
             ]);
-        }
 
-        if ($leaveRequest->type->deductsFromPool()) {
-            $this->balances->deduct($leaveRequest->user, $leaveRequest->calculated_days, $year);
-        }
+            return $locked;
+        });
 
-        $leaveRequest->update([
-            'status' => LeaveStatus::Approved,
-            'approved_by' => $approver->id,
-        ]);
-
+        // After commit, so a rolled-back approval never tells anyone "approved".
         $leaveRequest->user->notify(new LeaveRequestStatusChanged($leaveRequest));
 
         return $leaveRequest;
@@ -167,16 +185,69 @@ class LeaveRequestService
     /**
      * Deny a pending request and notify the submitter. No balance is touched
      * because pool days are only deducted on approval.
+     *
+     * @throws LeaveRequestAlreadyDecided when someone else decided it first
      */
     public function deny(LeaveRequest $leaveRequest, User $approver): LeaveRequest
     {
-        $leaveRequest->update([
-            'status' => LeaveStatus::Denied,
-            'approved_by' => $approver->id,
-        ]);
+        $leaveRequest = DB::transaction(function () use ($leaveRequest, $approver) {
+            $locked = $this->lockPending($leaveRequest);
+
+            $locked->update([
+                'status' => LeaveStatus::Denied,
+                'approved_by' => $approver->id,
+            ]);
+
+            return $locked;
+        });
 
         $leaveRequest->user->notify(new LeaveRequestStatusChanged($leaveRequest));
 
         return $leaveRequest;
+    }
+
+    /**
+     * Cancel a pending request on its submitter's behalf and tell the approver.
+     * No balance is touched because pool days are only deducted on approval.
+     *
+     * @throws LeaveRequestAlreadyDecided when someone else decided it first
+     */
+    public function cancel(LeaveRequest $leaveRequest): LeaveRequest
+    {
+        $leaveRequest = DB::transaction(function () use ($leaveRequest) {
+            $locked = $this->lockPending($leaveRequest);
+
+            $locked->update([
+                'status' => LeaveStatus::Cancelled,
+                'cancelled_at' => now(),
+            ]);
+
+            return $locked;
+        });
+
+        $this->approverResolver->resolve($leaveRequest->user)
+            ?->notify(new LeaveRequestCancelled($leaveRequest));
+
+        return $leaveRequest;
+    }
+
+    /**
+     * Re-read the request under a row lock and make sure it is still pending.
+     *
+     * The caller's copy may be stale — loaded, and authorized, before another
+     * request decided it — so the status it carries can't be trusted. Must be
+     * called inside DB::transaction().
+     *
+     * @throws LeaveRequestAlreadyDecided when someone else decided it first
+     */
+    private function lockPending(LeaveRequest $leaveRequest): LeaveRequest
+    {
+        $locked = LeaveRequest::whereKey($leaveRequest->getKey())->lockForUpdate()->firstOrFail();
+
+        if (! $locked->isPending()) {
+            throw new LeaveRequestAlreadyDecided($locked->status);
+        }
+
+        return $locked;
     }
 }

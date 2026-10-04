@@ -56,10 +56,18 @@ class AttendanceCalendar extends Component
         $this->selectedDay = null;
     }
 
+    /**
+     * The earliest year the pickers offer.
+     */
+    public const FIRST_YEAR = 2020;
+
     public function mount(): void
     {
-        $this->year  = $this->year  ?: now()->year;
+        $this->year = $this->year ?: now()->year;
         $this->month = $this->month ?: now()->month;
+
+        // year and month come from the query string, so anything can arrive.
+        $this->clampToCurrentMonth();
     }
 
     // ── Navigation ────────────────────────────────────────────────────────────
@@ -67,7 +75,7 @@ class AttendanceCalendar extends Component
     public function prevMonth(): void
     {
         $date = $this->monthStart()->subMonth();
-        $this->year  = $date->year;
+        $this->year = $date->year;
         $this->month = $date->month;
         $this->selectedDay = null;
     }
@@ -80,7 +88,7 @@ class AttendanceCalendar extends Component
         }
 
         $date = $this->monthStart()->addMonth();
-        $this->year  = $date->year;
+        $this->year = $date->year;
         $this->month = $date->month;
         $this->selectedDay = null;
     }
@@ -95,8 +103,21 @@ class AttendanceCalendar extends Component
         $this->clampToCurrentMonth();
     }
 
+    /**
+     * Keep the period on a real, selectable month: 1–12, from FIRST_YEAR to
+     * now, never in the future. Carbon would otherwise roll ?month=13 into
+     * January of the following year without complaint.
+     */
     private function clampToCurrentMonth(): void
     {
+        if ($this->month < 1 || $this->month > 12) {
+            $this->month = now()->month;
+        }
+
+        if ($this->year < self::FIRST_YEAR || $this->year > now()->year) {
+            $this->year = now()->year;
+        }
+
         if ($this->year === now()->year && $this->month > now()->month) {
             $this->month = now()->month;
         }
@@ -159,20 +180,6 @@ class AttendanceCalendar extends Component
         return $team !== null && $this->allows('updateTeamMember', $team);
     }
 
-    #[Computed]
-    public function canViewTimeEntries(): bool
-    {
-        $user = $this->currentUser();
-
-        return $user !== null && $this->allows('view', new TimeEntry(['user_id' => $user->id]));
-    }
-
-    #[Computed]
-    public function canExportAttendance(): bool
-    {
-        return $this->allows('export', TimeEntry::class);
-    }
-
     // ── View helpers ──────────────────────────────────────────────────────────
 
     #[Computed]
@@ -194,6 +201,7 @@ class AttendanceCalendar extends Component
     public function firstDayOffset(): int
     {
         $dow = $this->monthStart()->dayOfWeek; // 0 = Sunday
+
         return $dow === 0 ? 6 : $dow - 1;
     }
 

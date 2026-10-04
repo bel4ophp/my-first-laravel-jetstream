@@ -16,7 +16,7 @@
     </button>
 
     <!-- Dropdown -->
-    <div x-show="open" @click.away="open = false" x-transition
+    <div x-show="open" @click.outside="open = false" x-transition
         class="absolute left-[-8rem] sm:right-0 z-50 mt-3 w-80 max-w-sm
             bg-base-300
             shadow-md shadow-accent/40">
@@ -39,7 +39,8 @@
         <div class="max-h-96 overflow-y-auto">
 
             @forelse($this->notifications as $notification)
-                <div
+                @php($summary = \App\Notifications\NotificationSummary::for($notification))
+                <div wire:key="notification-{{ $notification->id }}"
                     class="px-4 py-3 flex gap-3 hover:bg-gray-50 dark:hover:bg-gray-700
                             transition border-b border-gray-100 dark:border-gray-700
                             {{ is_null($notification->read_at) ? 'bg-gray-50/50 dark:bg-gray-700/30' : '' }}">
@@ -57,13 +58,11 @@
                     <div class="flex-1 min-w-0">
 
                         <p class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                            {{ $notification->data['employee_name'] ?? 'System' }}
+                            {{ $summary['title'] }}
                         </p>
 
                         <p class="text-xs text-gray-500 dark:text-gray-400">
-                            Clocked <span class="font-medium text-gray-700 dark:text-gray-300">
-                                {{ $notification->data['action'] ?? '' }}
-                            </span>
+                            {{ $summary['body'] }}
                         </p>
 
                         <p class="text-[11px] text-gray-400 dark:text-gray-500 mt-1"

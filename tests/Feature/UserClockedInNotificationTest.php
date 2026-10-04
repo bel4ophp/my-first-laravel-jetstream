@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\ClockAction;
 use App\Events\UserClockedInEvent;
 use App\Models\Team;
 use App\Models\TimeEntry;
@@ -142,6 +143,32 @@ class UserClockedInNotificationTest extends TestCase
      * notification." linking to url('/')) and was mailed to a manager on every
      * clock-in. Nothing asserted the body, so nothing caught it.
      */
+    public function test_a_clock_out_says_clocked_out_and_when(): void
+    {
+        [$team, $manager] = $this->makeTeamWithManager();
+        $employee = User::factory()->create(['current_team_id' => $team->id]);
+        $entry = TimeEntry::factory()->forDay('2026-06-15')->create(['user_id' => $employee->id]);
+
+        $mail = (new UserClockedInNotification($employee, $entry, ClockAction::ClockOut))->toMail($manager);
+
+        $this->assertSame("{$employee->name} clocked out at {$entry->clockOutFormatted()}", $mail->subject);
+    }
+
+    /**
+     * Rows already in the notifications table hold the plain string, so the
+     * enum must keep storing exactly that.
+     */
+    public function test_the_stored_action_is_the_plain_string_older_rows_hold(): void
+    {
+        [$team, $manager] = $this->makeTeamWithManager();
+        $employee = User::factory()->create(['current_team_id' => $team->id]);
+        $entry = TimeEntry::factory()->active()->create(['user_id' => $employee->id]);
+
+        $data = (new UserClockedInNotification($employee, $entry, ClockAction::ClockIn))->toDatabase($manager);
+
+        $this->assertSame('clock_in', $data['action']);
+    }
+
     public function test_the_clock_in_email_says_who_clocked_in_and_when(): void
     {
         [$team, $manager] = $this->makeTeamWithManager();
@@ -151,7 +178,7 @@ class UserClockedInNotificationTest extends TestCase
 
         $entry = TimeEntry::factory()->forDay('2026-06-15')->create(['user_id' => $employee->id]);
 
-        $mail = (new UserClockedInNotification($employee, $entry, 'clock_in'))->toMail($manager);
+        $mail = (new UserClockedInNotification($employee, $entry, ClockAction::ClockIn))->toMail($manager);
         $rendered = (string) $mail->render();
 
         $this->assertStringContainsString($employee->name, $mail->subject);
@@ -174,7 +201,7 @@ class UserClockedInNotificationTest extends TestCase
         $employee = User::factory()->create(['current_team_id' => $team->id]);
         $entry = TimeEntry::factory()->forDay('2026-06-15')->create(['user_id' => $employee->id]);
 
-        $rendered = (string) (new UserClockedInNotification($employee, $entry, 'clock_in'))
+        $rendered = (string) (new UserClockedInNotification($employee, $entry, ClockAction::ClockIn))
             ->toMail($manager)
             ->render();
 

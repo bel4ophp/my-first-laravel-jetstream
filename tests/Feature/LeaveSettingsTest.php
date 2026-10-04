@@ -7,8 +7,11 @@ use App\Models\Holiday;
 use App\Models\LeaveBalance;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\LeaveRecalculationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Livewire;
+use RuntimeException;
 use Tests\TestCase;
 
 class LeaveSettingsTest extends TestCase
@@ -39,6 +42,143 @@ class LeaveSettingsTest extends TestCase
     private function usedDays(User $user): int
     {
         return LeaveBalance::where('user_id', $user->id)->where('year', now()->year)->value('used_days');
+    }
+
+    // ── Permission is checked on every action, not just on page load ──────────
+
+    /**
+     * A manager demoted while the settings page is open keeps a live component.
+     * Livewire only runs mount() once, so every later request must re-check
+     * permission. Each set()/call() in a Livewire test is its own request, so
+     * the form is filled in before the demotion and only the action follows it.
+     */
+    private function demote(User $manager, Team $team): void
+    {
+        $team->users()->updateExistingPivot($manager->id, ['role' => 'employee']);
+        $this->actingAs($manager->fresh());
+    }
+
+    public function test_a_demoted_manager_cannot_save_a_holiday_from_an_open_page(): void
+    {
+        $team = $this->makeOwner()->currentTeam;
+        $manager = $this->makeManager($team);
+
+        $component = Livewire::actingAs($manager)->test(LeaveSettings::class)
+            ->set('holidayName', 'Founders Day')
+            ->set('holidayDate', '2026-07-01');
+
+        $this->demote($manager, $team);
+
+        $component->call('saveHoliday')->assertForbidden();
+
+        $this->assertSame(0, $team->holidays()->count());
+    }
+
+    public function test_a_demoted_manager_cannot_delete_a_holiday_from_an_open_page(): void
+    {
+        $team = $this->makeOwner()->currentTeam;
+        $manager = $this->makeManager($team);
+        $holiday = Holiday::factory()->create(['team_id' => $team->id]);
+
+        $component = Livewire::actingAs($manager)->test(LeaveSettings::class);
+
+        $this->demote($manager, $team);
+
+        $component->call('deleteHoliday', $holiday->id)->assertForbidden();
+
+        $this->assertModelExists($holiday);
+    }
+
+    public function test_a_demoted_manager_cannot_change_days_off_from_an_open_page(): void
+    {
+        $team = $this->makeOwner()->currentTeam;
+        $manager = $this->makeManager($team);
+        $employee = $this->makeEmployee($team);
+        LeaveBalance::factory()->create(['user_id' => $employee->id, 'year' => now()->year, 'total_days' => 20]);
+
+        $component = Livewire::actingAs($manager)->test(LeaveSettings::class)
+            ->call('editMember', $employee->id)
+            ->set('memberTotalDays', 60);
+
+        $this->demote($manager, $team);
+
+        $component->call('saveMember')->assertForbidden();
+
+        $this->assertSame(20, LeaveBalance::where('user_id', $employee->id)->value('total_days'));
+    }
+
+    // ── Holiday writes and their recalculation are one unit ──────────────────
+
+    private function failingRecalculation(): void
+    {
+        $this->mock(LeaveRecalculationService::class, fn ($mock) => $mock
+            ->shouldReceive('recalculateForTeam')
+            ->andThrow(new RuntimeException('recalculation failed')));
+    }
+
+    /**
+     * Saving a holiday and re-deriving the requests it affects used to be two
+     * separate writes: if the recalculation failed, the holiday stayed saved
+     * while requests kept their old day counts.
+     */
+    public function test_a_failed_recalculation_rolls_back_the_new_holiday(): void
+    {
+        $team = $this->makeOwner()->currentTeam;
+        $manager = $this->makeManager($team);
+        $this->failingRecalculation();
+
+        try {
+            Livewire::actingAs($manager)->test(LeaveSettings::class)
+                ->set('holidayName', 'Founders Day')
+                ->set('holidayDate', '2026-07-01')
+                ->call('saveHoliday');
+        } catch (RuntimeException) {
+            // Expected.
+        }
+
+        $this->assertSame(0, $team->holidays()->count());
+    }
+
+    public function test_a_failed_recalculation_rolls_back_the_deletion(): void
+    {
+        $team = $this->makeOwner()->currentTeam;
+        $manager = $this->makeManager($team);
+        $holiday = Holiday::factory()->create(['team_id' => $team->id]);
+        $this->failingRecalculation();
+
+        try {
+            Livewire::actingAs($manager)->test(LeaveSettings::class)->call('deleteHoliday', $holiday->id);
+        } catch (RuntimeException) {
+            // Expected.
+        }
+
+        $this->assertModelExists($holiday);
+    }
+
+    // ── Scope rules live in policies, where the API can reach them ────────────
+
+    public function test_a_manager_manages_leave_settings_for_their_own_team_only(): void
+    {
+        $team = $this->makeOwner()->currentTeam;
+        $manager = $this->makeManager($team);
+        $employee = $this->makeEmployee($team);
+        $otherTeam = $this->makeOwner()->currentTeam;
+
+        $this->assertTrue(Gate::forUser($manager)->allows('manageLeaveSettings', $team));
+        $this->assertTrue(Gate::forUser($manager)->denies('manageLeaveSettings', $otherTeam));
+        $this->assertTrue(Gate::forUser($employee)->denies('manageLeaveSettings', $team));
+    }
+
+    public function test_a_manager_manages_leave_balances_for_their_own_team_only(): void
+    {
+        $team = $this->makeOwner()->currentTeam;
+        $manager = $this->makeManager($team);
+        $employee = $this->makeEmployee($team);
+        $stranger = $this->makeEmployee($this->makeOwner()->currentTeam);
+
+        $this->assertTrue(Gate::forUser($manager)->allows('manageLeaveBalance', $employee));
+        $this->assertTrue(Gate::forUser($manager)->denies('manageLeaveBalance', $stranger));
+        $this->assertTrue(Gate::forUser($employee)->denies('manageLeaveBalance', $manager));
     }
 
     // ── Pool reset ────────────────────────────────────────────────────────────

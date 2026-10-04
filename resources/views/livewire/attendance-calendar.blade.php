@@ -1,4 +1,5 @@
-<div class="space-y-2 sm:space-y-4 w-full px-2 sm:px-0">
+{{-- x-data gives the export button and its dialog one Alpine scope for $refs --}}
+<div class="space-y-2 sm:space-y-4 w-full px-2 sm:px-0" x-data>
 
     {{-- ── Month navigation --}}
     <div class="flex items-center justify-between">
@@ -22,7 +23,7 @@
             </select>
             <select wire:model.live="year"
                     class="select select-sm text-sm select-ghost focus:outline-none">
-                @foreach (range(now()->year, 2020) as $y)
+                @foreach (range(now()->year, $this::FIRST_YEAR) as $y)
                     <option value="{{ $y }}">{{ $y }}</option>
                 @endforeach
             </select>
@@ -60,7 +61,7 @@
 
             {{-- Empty offset --}}
             @for ($i = 0; $i < $this->firstDayOffset; $i++)
-                <div class="min-h-[3rem] sm:min-h-[5rem] rounded-box bg-base-200/70 border border-base-200"></div>
+                <div wire:key="offset-{{ $year }}-{{ $month }}-{{ $i }}" class="min-h-[3rem] sm:min-h-[5rem] rounded-box bg-base-200/70 border border-base-200"></div>
             @endfor
 
             {{-- Day cells --}}
@@ -75,7 +76,7 @@
                     $clickable  = ! $isFuture && ! $isWeekend;
                 @endphp
 
-                <div
+                <div wire:key="day-{{ $year }}-{{ $month }}-{{ $day }}"
                     @if ($clickable) wire:click="selectDay({{ $day }})" @endif
                     @class([
                         'min-h-[3rem] sm:min-h-[5rem] rounded-box border p-1.5 sm:p-2 text-left transition-all duration-150',
@@ -100,7 +101,7 @@
                         <div class="hidden sm:flex sm:flex-col sm:gap-0.5">
                             @foreach ($entries->take(2) as $entry)
                                 @php $status = $entry->status(); @endphp
-                                <span @class([
+                                <span wire:key="badge-{{ $entry->id }}" @class([
                                     'badge badge-xs truncate text-[7px] sm:text-xs',
                                     'badge-success' => $status === 'in',
                                     'badge-warning' => $status === 'late',
@@ -114,7 +115,7 @@
                         {{-- Mobile skeleton loaders --}}
                         <div class="sm:hidden flex flex-col gap-0.5">
                             @foreach ($entries->take(2) as $entry)
-                                <div class="skeleton h-4 w-100 rounded"></div>
+                                <div wire:key="skeleton-{{ $entry->id }}" class="skeleton h-4 w-100 rounded"></div>
                             @endforeach
                         </div>
 
@@ -142,7 +143,7 @@
 
         @if ($this->canExportAttendance)
             <button type="button"
-                    onclick="document.getElementById('attendance-export-modal').showModal()"
+                    @click="$refs.exportModal.showModal()"
                     class="btn btn-xs btn-outline gap-1.5">
                 <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/>
@@ -155,7 +156,7 @@
     {{-- ── Day detail panel --}}
     {{-- ── Export modal (admin + manager only) --}}
     @if ($this->canExportAttendance)
-        <dialog id="attendance-export-modal" class="modal">
+        <dialog x-ref="exportModal" class="modal">
             <div class="modal-box w-full max-w-md"
                  x-data="{
                      type: 'monthly',
@@ -219,7 +220,7 @@
                             <div class="form-control flex-1">
                                 <label class="label pb-1"><span class="label-text text-xs">Year</span></label>
                                 <select name="year" x-model.number="year" class="select select-sm text-sm select-bordered w-full">
-                                    @foreach (range(now()->year, 2020) as $y)
+                                    @foreach (range(now()->year, $this::FIRST_YEAR) as $y)
                                         <option value="{{ $y }}">{{ $y }}</option>
                                     @endforeach
                                 </select>
@@ -240,7 +241,7 @@
                         <div class="form-control">
                             <label class="label pb-1"><span class="label-text text-xs">Year</span></label>
                             <select name="year" x-model.number="year" class="select select-sm text-sm select-bordered w-full">
-                                @foreach (range(now()->year, 2020) as $y)
+                                @foreach (range(now()->year, $this::FIRST_YEAR) as $y)
                                     <option value="{{ $y }}">{{ $y }}</option>
                                 @endforeach
                             </select>

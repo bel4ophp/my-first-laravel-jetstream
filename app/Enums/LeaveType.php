@@ -30,10 +30,10 @@ enum LeaveType: string
     public function label(): string
     {
         return match ($this) {
-            self::Annual => 'Annual Leave',
-            self::FreeDay => 'Free Day',
-            self::Unpaid => 'Unpaid Leave',
-            self::Sick => 'Sick Leave',
+            self::Annual => __('Annual Leave'),
+            self::FreeDay => __('Free Day'),
+            self::Unpaid => __('Unpaid Leave'),
+            self::Sick => __('Sick Leave'),
         };
     }
 
